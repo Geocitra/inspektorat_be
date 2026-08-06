@@ -1,0 +1,547 @@
+// prisma/schema.prisma
+// SOURCE OF TRUTH: Seluruh definisi tabel database ada di sini.
+// AI Agent: Selalu baca file ini sebelum menulis query Prisma.
+
+// CATATAN FASE 5: Ekstensi pgvector akan ditambahkan kembali pada Fase 5 (AI/RAG).
+// pgvector memerlukan kompilasi manual di Windows menggunakan Visual Studio C++ Build Tools.
+// Panduan: lihat roadmap be fase 1.txt bagian "PostgreSQL & pgvector"
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================
+// ENUM DEFINITIONS
+// ============================================================
+
+// ADR-001: 4 Database Roles saja (lihat docs/ADR-001-RBAC-Design.md)
+// LARANGAN KERAS: Jangan tambah enum value baru selain 4 ini!
+enum SystemRole {
+  APIP_INTERNAL   // Semua pegawai Inspektorat
+  APIP_PIMPINAN   // Irban & Inspektur (hak TTE & otorisasi)
+  AUDITEE_OPD     // Admin OPD eksternal
+  KEPALA_DAERAH   // Bupati/Walikota (read-only dashboard)
+}
+
+// Sumber data pegawai: manual diinput atau hasil sinkronisasi dari BKD
+enum SumberData {
+  MANUAL
+  SINKRONISASI_BKD
+}
+
+// ============================================================
+// TABEL: AUTENTIKASI & PENGGUNA (Fondasi ADR-001)
+// ============================================================
+
+model User {
+  id        String     @id @default(uuid()) @db.Uuid
+  email     String     @unique @db.VarChar(255)
+  password  String     @db.VarChar(255) // Bcrypt hash, JANGAN simpan plain text
+  role      SystemRole
+  // Relasi ke data Inspektorat (null jika akun OPD atau Bupati)
+  pegawaiId String?    @unique @map("pegawai_id") @db.Uuid
+  // Relasi ke OPD (hanya untuk role AUDITEE_OPD, null untuk internal)
+  opdId     String?    @map("opd_id") @db.Uuid
+  isActive  Boolean    @default(true) @map("is_active")
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  opd     MstOpd?     @relation(fields: [opdId], references: [id], onDelete: Restrict)
+  pegawai MstPegawai? @relation(fields: [pegawaiId], references: [id], onDelete: Restrict)
+
+  @@map("users")
+}
+
+// ============================================================
+// TABEL MASTER DATA (Fase 1 - Sub-Fase 1.2)
+// ============================================================
+
+model MstOpd {
+  id           String     @id @default(uuid()) @db.Uuid
+  namaOpd      String     @unique @map("nama_opd") @db.VarChar(255)
+  alamat       String     @map("alamat") @db.Text
+  gpsKoordinat String     @map("gps_koordinat") @db.VarChar(100) // Format: "latitude,longitude"
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  pegawai          MstPegawai[]
+  users            User[]
+  agendaAudits     TrAgendaAudit[]
+  temuan           TrTemuan[]
+  tiketKonsultasis TrTiketKonsultasi[]
+
+  @@map("mst_opd")
+}
+
+model MstPegawai {
+  id                      String                     @id @default(uuid()) @db.Uuid
+  nip                     String                     @unique @map("nip") @db.VarChar(50)
+  nama                    String                     @map("nama") @db.VarChar(255)
+  golongan                String?                    @map("golongan") @db.VarChar(100)
+  jabatan                 String?                    @map("jabatan") @db.VarChar(100)
+  opdId                   String                     @map("opd_id") @db.Uuid
+  sumberData              SumberData                 @default(MANUAL) @map("sumber_data")
+  terakhirDisinkronkan    DateTime?                  @map("terakhir_disinkronkan") @db.Timestamptz
+  
+  // Relations
+  opd                        MstOpd                       @relation(fields: [opdId], references: [id], onDelete: Restrict)
+  user                       User?
+  approvedPkpt               TrPkpt[]
+  stAuditors                 RelStAuditor[]
+  verifikasiTindakLanjuts    TrVerifikasiTindakLanjut[]
+  rekomendasiPenugasanKhusus TrRekomendasiPenugasanKhusus[]
+  tiketKonsultasiSupervisis  TrTiketKonsultasi[]          @relation("IrbanSupervisor")
+  tiketKonsultasiJawabans    TrTiketKonsultasi[]          @relation("AuditorJawab")
+
+  @@map("mst_pegawai")
+}
+
+// ============================================================
+// ENUMS UNTUK KLASTER A (CORE ENGINE)
+// ============================================================
+
+enum StatusPkpt {
+  DRAF
+  MENUNGGU_PERSETUJUAN
+  DISETUJUI
+}
+
+enum StatusSt {
+  DRAF
+  AKTIF
+  SELESAI
+}
+
+enum PeranSt {
+  Pengawas_Teknis
+  Ketua_Tim
+  Anggota_Tim
+}
+
+enum StatusKka {
+  DRAF
+  MENUNGGU_ULASAN
+  APPROVED
+  REVISI
+}
+
+enum StatusTemuan {
+  PROSES
+  SIAP_DIKUNCI
+  TUNTAS
+}
+
+enum StatusRekomendasi {
+  BELUM_TINDAK_LANJUT
+  MENUNGGU_VERIFIKASI
+  BELUM_SESUAI
+  SESUAI
+}
+
+// ============================================================
+// MODEL TRANSAKSI KLASTER A
+// ============================================================
+
+model TrPkpt {
+  id                    String        @id @default(uuid()) @db.Uuid
+  tahunAnggaran         Int           @unique @map("tahun_anggaran")
+  statusPkpt            StatusPkpt    @default(DRAF) @map("status_pkpt")
+  approvedByInspekturId String?       @map("approved_by_inspektur_id") @db.Uuid
+  approvedAt            DateTime?     @map("approved_at") @db.Timestamptz
+
+  // Relations
+  approvedBy   MstPegawai?     @relation(fields: [approvedByInspekturId], references: [id], onDelete: Restrict)
+  agendaAudits TrAgendaAudit[]
+
+  @@map("tr_pkpt")
+}
+
+model TrAgendaAudit {
+  id              String        @id @default(uuid()) @db.Uuid
+  pkptId          String        @map("pkpt_id") @db.Uuid
+  opdId           String        @map("opd_id") @db.Uuid
+  jenisPengawasan String        @map("jenis_pengawasan") @db.VarChar(100) // Audit, Reviu, Evaluasi, Pemantauan
+  perkiraanBulan  Int           @map("perkiraan_bulan") @db.Integer // 1 - 12
+  estimasiAnggaran Decimal      @default(0.00) @map("estimasi_anggaran") @db.Decimal(15, 2)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  pkpt       TrPkpt        @relation(fields: [pkptId], references: [id], onDelete: Cascade)
+  opd        MstOpd        @relation(fields: [opdId], references: [id], onDelete: Restrict)
+  suratTugas TrSuratTugas?
+
+  @@map("tr_agenda_audit")
+}
+
+model TrSuratTugas {
+  id            String          @id @default(uuid()) @db.Uuid
+  agendaAuditId String?         @unique @map("agenda_audit_id") @db.Uuid
+  nomorSt       String          @unique @map("nomor_st") @db.VarChar(150)
+  tanggalMulai  DateTime        @map("tanggal_mulai") @db.Date
+  tanggalSelesai DateTime       @map("tanggal_selesai") @db.Date
+  statusSt      StatusSt        @default(DRAF) @map("status_st")
+  signedAt      DateTime?       @map("signed_at") @db.Timestamptz
+  rekomendasiPenugasanKhususId String? @unique @map("rekomendasi_penugasan_khusus_id") @db.Uuid
+
+  // Relations
+  agendaAudit                TrAgendaAudit?               @relation(fields: [agendaAuditId], references: [id], onDelete: SetNull)
+  stAuditors                 RelStAuditor[]
+  kkas                       TrKka[]
+  lhp                        TrLhp?
+  rekomendasiPenugasanKhusus TrRekomendasiPenugasanKhusus? @relation(fields: [rekomendasiPenugasanKhususId], references: [id], onDelete: SetNull)
+
+  @@map("tr_surat_tugas")
+}
+
+// Tabel Persimpangan Banyak-ke-Banyak (ST & Auditor/Pegawai)
+model RelStAuditor {
+  id            String       @id @default(uuid()) @db.Uuid
+  stId          String       @map("st_id") @db.Uuid
+  auditorId     String       @map("auditor_id") @db.Uuid
+  peranDalamTim PeranSt      @map("peran_dalam_tim")
+
+  // Relations
+  suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Cascade)
+  auditor    MstPegawai   @relation(fields: [auditorId], references: [id], onDelete: Restrict)
+
+  @@unique([stId, auditorId])
+  @@map("rel_st_auditor")
+}
+
+model TrKka {
+  id                  String           @id @default(uuid()) @db.Uuid
+  stId                String           @map("st_id") @db.Uuid
+  prosedurPemeriksaan String           @map("prosedur_pemeriksaan") @db.Text
+  uraianPengujian     String           @map("uraian_pengujian") @db.Text
+  kesimpulanSementara String           @map("kesimpulan_sementara") @db.Text
+  statusKka           StatusKka        @default(DRAF) @map("status_kka")
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  lhpId               String?          @map("lhp_id") @db.Uuid
+
+  // Relations
+  suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Restrict)
+  lhp        TrLhp?       @relation(fields: [lhpId], references: [id], onDelete: SetNull)
+  temuan     TrTemuan[]
+
+  @@map("tr_kka")
+}
+
+model TrLhp {
+  id                 String       @id @default(uuid()) @db.Uuid
+  stId               String       @unique @map("st_id") @db.Uuid
+  nomorLhp           String       @unique @map("nomor_lhp") @db.VarChar(150)
+  ringkasanEksekutif String       @map("ringkasan_eksekutif") @db.Text
+  fileLhpSignedPath  String       @map("file_lhp_signed_path") @db.VarChar(255)
+  signedAt           DateTime?    @map("signed_at") @db.Timestamptz
+
+  // Relations
+  suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Restrict)
+  kkas       TrKka[]
+  temuan     TrTemuan[]
+
+  @@map("tr_lhp")
+}
+
+model TrTemuan {
+  id           String         @id @default(uuid()) @db.Uuid
+  lhpId        String         @map("lhp_id") @db.Uuid
+  kkaId        String         @map("kka_id") @db.Uuid
+  opdId        String         @map("opd_id") @db.Uuid
+  kondisi      String         @map("kondisi") @db.Text
+  kriteria     String         @map("kriteria") @db.Text
+  sebab        String         @map("sebab") @db.Text
+  akibat       String         @map("akibat") @db.Text
+  statusTemuan StatusTemuan   @default(PROSES) @map("status_temuan")
+
+  // Relations
+  lhp          TrLhp          @relation(fields: [lhpId], references: [id], onDelete: Restrict)
+  kka          TrKka          @relation(fields: [kkaId], references: [id], onDelete: Restrict)
+  opd          MstOpd         @relation(fields: [opdId], references: [id], onDelete: Restrict)
+  rekomendasis TrRekomendasi[]
+
+  @@map("tr_temuan")
+}
+
+model TrRekomendasi {
+  id                     String            @id @default(uuid()) @db.Uuid
+  temuanId               String            @map("temuan_id") @db.Uuid
+  uraianRekomendasi      String            @map("uraian_rekomendasi") @db.Text
+  nilaiTuntutanFinansial Decimal           @default(0.00) @map("nilai_tuntutan_finansial") @db.Decimal(15, 2)
+  statusRekomendasi      StatusRekomendasi @default(BELUM_TINDAK_LANJUT) @map("status_rekomendasi")
+
+  // Relations
+  temuan       TrTemuan      @relation(fields: [temuanId], references: [id], onDelete: Cascade)
+  tindakLanjuts TrTindakLanjut[]
+
+  @@map("tr_rekomendasi")
+}
+
+// ============================================================
+// ENUMS TAMBAHAN UNTUK KLASTER C (TLHP)
+// ============================================================
+
+enum StatusTindakLanjut {
+  MENUNGGU_VERIFIKASI
+  BELUM_SESUAI
+  SESUAI
+}
+
+enum HasilVerifikasi {
+  SESUAI
+  BELUM_SESUAI
+}
+
+// ============================================================
+// MODEL TRANSAKSI BARU KLASTER C
+// ============================================================
+
+model TrTindakLanjut {
+  id                 String             @id @default(uuid()) @db.Uuid
+  rekomendasiId      String             @map("rekomendasi_id") @db.Uuid
+  uraianTindakan     String             @map("uraian_tindakan") @db.Text
+  isTerlambat        Boolean            @default(false) @map("is_terlambat")
+  statusTindakLanjut StatusTindakLanjut @default(MENUNGGU_VERIFIKASI) @map("status_tindak_lanjut")
+  tanggalUnggah      DateTime           @default(now()) @map("tanggal_unggah") @db.Timestamptz
+
+  // Relations
+  rekomendasi         TrRekomendasi               @relation(fields: [rekomendasiId], references: [id], onDelete: Restrict)
+  buktiTindakLanjuts  TrBuktiTindakLanjut[]
+  verifikasi          TrVerifikasiTindakLanjut?
+
+  @@map("tr_tindak_lanjut")
+}
+
+model TrBuktiTindakLanjut {
+  id                String          @id @default(uuid()) @db.Uuid
+  tindakLanjutId    String          @map("tindak_lanjut_id") @db.Uuid
+  filePath          String          @map("file_path") @db.VarChar(255)
+  gpsLatitude       Float?          @map("gps_latitude")
+  gpsLongitude      Float?          @map("gps_longitude")
+  timestampMetadata DateTime?       @map("timestamp_metadata") @db.Timestamptz
+
+  // Relations
+  tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Cascade)
+
+  @@map("tr_bukti_tindak_lanjut")
+}
+
+model TrVerifikasiTindakLanjut {
+  id                 String          @id @default(uuid()) @db.Uuid
+  tindakLanjutId     String          @unique @map("tindak_lanjut_id") @db.Uuid
+  verifikatorId      String          @map("verifikator_id") @db.Uuid
+  catatanVerifikator String          @map("catatan_verifikator") @db.Text
+  hasilVerifikasi    HasilVerifikasi @map("hasil_verifikasi")
+  tanggalVerifikasi  DateTime        @default(now()) @map("tanggal_verifikasi") @db.Timestamptz
+
+  // Relations
+  tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Restrict)
+  verifikator       MstPegawai      @relation(fields: [verifikatorId], references: [id], onDelete: Restrict)
+
+  @@map("tr_verifikasi_tindak_lanjut")
+}
+
+model SecAppendOnlyLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventName   String   @map("event_name") @db.VarChar(255)
+  actorId     String   @map("actor_id") @db.Uuid
+  ipAddress   String   @map("ip_address") @db.VarChar(45)
+  dataPayload Json     @map("data_payload") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("sec_append_only_log")
+}
+
+// ============================================================
+// ENUMS TAMBAHAN UNTUK KLASTER B (WBS)
+// ============================================================
+
+enum StatusWbs {
+  Diterima
+  Butuh_Klarifikasi
+  Penyelidikan
+  Arsip
+}
+
+enum KeputusanTriage {
+  Klarifikasi_Dibutuhkan
+  Diarsipkan_Tolak
+  Rekomendasi_Audit
+}
+
+enum HasilTriage {
+  Menunggu_Otorisasi_Pimpinan
+  DISETUJUI
+  DITOLAK
+}
+
+// ============================================================
+// MODEL TRANSAKSI BARU KLASTER B (WBS)
+// ============================================================
+
+model WbsAduan {
+  id              String            @id @default(uuid()) @db.Uuid
+  tokenPelacakan  String            @unique @map("token_pelacakan") @db.VarChar(100)
+  kategori        String            @map("kategori") @db.VarChar(150)
+  deskripsi       String            @map("deskripsi") @db.Text // Encrypted AES-256-GCM
+  status          StatusWbs         @default(Diterima) @map("status")
+  catatanAkhir    String?           @map("catatan_akhir") @db.Text
+  tanggalKirim    DateTime          @default(now()) @map("tanggal_kirim") @db.Timestamptz
+
+  // Relations
+  buktiWbs            WbsBukti[]
+  chats               WbsChat[]
+  rekomendasiPenugasan TrRekomendasiPenugasanKhusus?
+
+  @@map("wbs_aduan")
+}
+
+model WbsBukti {
+  id          String    @id @default(uuid()) @db.Uuid
+  wbsAduanId  String    @map("wbs_aduan_id") @db.Uuid
+  filePath    String    @map("file_path") @db.VarChar(255)
+
+  // Relations
+  wbsAduan    WbsAduan  @relation(fields: [wbsAduanId], references: [id], onDelete: Cascade)
+
+  @@map("wbs_bukti")
+}
+
+model WbsChat {
+  id          String    @id @default(uuid()) @db.Uuid
+  wbsAduanId  String    @map("wbs_aduan_id") @db.Uuid
+  sender      String    @map("sender") @db.VarChar(50) // "Investigator" atau "Whistleblower"
+  pesan       String    @map("pesan") @db.Text
+  timestamp   DateTime  @default(now()) @map("timestamp") @db.Timestamptz
+
+  // Relations
+  wbsAduan    WbsAduan  @relation(fields: [wbsAduanId], references: [id], onDelete: Cascade)
+
+  @@map("wbs_chat")
+}
+
+model TrRekomendasiPenugasanKhusus {
+  id                 String       @id @default(uuid()) @db.Uuid
+  wbsAduanId         String       @unique @map("wbs_aduan_id") @db.Uuid
+  judul              String       @map("judul") @db.VarChar(255)
+  rekomendatorId     String       @map("rekomendator_id") @db.Uuid
+  status             HasilTriage  @default(Menunggu_Otorisasi_Pimpinan) @map("status")
+  tanggalRekomendasi DateTime     @default(now()) @map("tanggal_rekomendasi") @db.Timestamptz
+
+  // Relations
+  wbsAduan           WbsAduan     @relation(fields: [wbsAduanId], references: [id], onDelete: Cascade)
+  rekomendator       MstPegawai   @relation(fields: [rekomendatorId], references: [id], onDelete: Restrict)
+  suratTugas         TrSuratTugas?
+
+  @@map("tr_rekomendasi_penugasan_khusus")
+}
+
+// ============================================================
+// ENUMS TAMBAHAN UNTUK KLASTER D (KLINIK KONSULTASI)
+// ============================================================
+
+enum StatusTiket {
+  MENUNGGU_JAWABAN
+  TERJAWAB
+  ESKALASI
+}
+
+// ============================================================
+// MODEL MASTER & TRANSAKSI KLASTER D
+// ============================================================
+
+model MstKategoriRegulasi {
+  id           String         @id @default(uuid()) @db.Uuid
+  namaKategori String         @unique @map("nama_kategori") @db.VarChar(150)
+  regulasis    MstRegulasi[]
+
+  @@map("mst_kategori_regulasi")
+}
+
+model MstRegulasi {
+  id             String               @id @default(uuid()) @db.Uuid
+  kategoriId     String               @map("kategori_id") @db.Uuid
+  nomorRegulasi  String               @unique @map("nomor_regulasi") @db.VarChar(150)
+  tentang        String               @map("tentang") @db.VarChar(255)
+  kontenTeks     String               @map("konten_teks") @db.Text
+  tahunTerbit    Int                  @map("tahun_terbit") @db.Integer
+  
+  // LOGIKA AI: Kolom penyimpan koordinat vektor 1536 dimensi (OpenAI / Local LLM Standard)
+  embedding      Float[]                      @map("embedding")
+
+  // Relations
+  kategori       MstKategoriRegulasi  @relation(fields: [kategoriId], references: [id], onDelete: Restrict)
+  tiketRegulasis RelTiketRegulasi[]
+  kmsArtikels    TrKmsArtikel[]
+
+  @@map("mst_regulasi")
+}
+
+model TrTiketKonsultasi {
+  id               String               @id @default(uuid()) @db.Uuid
+  opdId            String               @map("opd_id") @db.Uuid
+  nomorTiket       String               @unique @map("nomor_tiket") @db.VarChar(100)
+  judulPertanyaan  String               @map("judul_pertanyaan") @db.VarChar(255)
+  deskripsiKasus   String               @map("deskripsi_kasus") @db.Text
+  irbanId          String               @map("irban_id") @db.Uuid // Diarahkan ke Irban wilayah kerja
+  status           StatusTiket          @default(MENUNGGU_JAWABAN) @map("status")
+  rancanganJawaban String?              @map("rancangan_jawaban") @db.Text // Tempat draf AI Copilot
+  jawabanResmi     String?              @map("jawaban_resmi") @db.Text
+  auditorJawabId   String?              @map("auditor_jawab_id") @db.Uuid
+  tanggalPengajuan DateTime             @default(now()) @map("tanggal_pengajuan") @db.Timestamptz
+
+  // Relations
+  opd               MstOpd               @relation(fields: [opdId], references: [id], onDelete: Restrict)
+  irbanSupervisor   MstPegawai           @relation("IrbanSupervisor", fields: [irbanId], references: [id], onDelete: Restrict)
+  auditorJawab      MstPegawai?          @relation("AuditorJawab", fields: [auditorJawabId], references: [id], onDelete: Restrict)
+  lampirans         TrLampiranKonsultasi[]
+  tiketRegulasis    RelTiketRegulasi[]
+  kmsArtikel        TrKmsArtikel?
+
+  @@map("tr_tiket_konsultasi")
+}
+
+model TrLampiranKonsultasi {
+  id        String            @id @default(uuid()) @db.Uuid
+  tiketId   String            @map("tiket_id") @db.Uuid
+  filePath  String            @map("file_path") @db.VarChar(255)
+
+  // Relations
+  tiket     TrTiketKonsultasi @relation(fields: [tiketId], references: [id], onDelete: Cascade)
+
+  @@map("tr_lampiran_konsultasi")
+}
+
+// Tabel Persimpangan Banyak-ke-Banyak (Tiket Konsultasi & Regulasi Terkait)
+model RelTiketRegulasi {
+  id         String            @id @default(uuid()) @db.Uuid
+  tiketId    String            @map("tiket_id") @db.Uuid
+  regulasiId String            @map("regulasi_id") @db.Uuid
+
+  // Relations
+  tiket      TrTiketKonsultasi @relation(fields: [tiketId], references: [id], onDelete: Cascade)
+  regulasi   MstRegulasi       @relation(fields: [regulasiId], references: [id], onDelete: Restrict)
+
+  @@unique([tiketId, regulasiId])
+  @@map("rel_tiket_regulasi")
+}
+
+model TrKmsArtikel {
+  id                   String            @id @default(uuid()) @db.Uuid
+  tiketId              String            @unique @map("tiket_id") @db.Uuid
+  kategori             String            @map("kategori") @db.VarChar(150)
+  judulStudiKasus      String            @map("judul_studi_kasus") @db.VarChar(255)
+  deskripsiKasusAnonim String            @map("deskripsi_kasus_anonim") @db.Text // Hasil Sanitize
+  solusiHukum          String            @map("solusi_hukum") @db.Text
+  referensiRegulasiId  String?           @map("referensi_regulasi_id") @db.Uuid
+  tanggalArsip         DateTime          @default(now()) @map("tanggal_arsip") @db.Timestamptz
+
+  // Relations
+  tiket                TrTiketKonsultasi @relation(fields: [tiketId], references: [id], onDelete: Cascade)
+  regulasi             MstRegulasi?      @relation(fields: [referensiRegulasiId], references: [id], onDelete: SetNull)
+
+  @@map("tr_kms_artikel")
+}
