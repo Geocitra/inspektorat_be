@@ -46,3 +46,34 @@ export const SignStSchema = z.object({
 
 export type CreateStDto = z.infer<typeof CreateStSchema>;
 export type SignStDto = z.infer<typeof SignStSchema>;
+
+export const RecommendTeamSchema = z.object({
+  tanggalMulai: z
+    .string({ required_error: 'Tanggal mulai wajib diisi' })
+    .refine((val) => !isNaN(Date.parse(val)), {
+      message: 'Format tanggal mulai tidak valid',
+    }),
+  tanggalSelesai: z
+    .string({ required_error: 'Tanggal selesai wajib diisi' })
+    .refine((val) => !isNaN(Date.parse(val)), {
+      message: 'Format tanggal selesai tidak valid',
+    }),
+  fokusAudit: z
+    .string({ required_error: 'Fokus audit wajib diisi untuk pencocokan kompetensi' })
+    .min(3, 'Fokus audit minimal 3 karakter')
+    .max(500),
+}).refine((data) => Date.parse(data.tanggalSelesai) >= Date.parse(data.tanggalMulai), {
+  message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
+  path: ['tanggalSelesai'],
+});
+
+export const GeneratePkaSchema = z.object({
+  fokusPengawasan: z
+    .string()
+    .max(1000, 'Fokus pengawasan maksimal 1000 karakter')
+    .optional(),
+});
+
+export type RecommendTeamDto = z.infer<typeof RecommendTeamSchema>;
+export type GeneratePkaDto = z.infer<typeof GeneratePkaSchema>;
+

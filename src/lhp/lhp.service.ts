@@ -10,7 +10,7 @@ import { CreateLhpDto, SignLhpDto } from './dto/lhp.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, QueueEvents } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { StatusRekomendasi, StatusTemuan } from '@prisma/client';
+import { StatusRekomendasi, StatusTemuan, SumberPembuatan } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -84,14 +84,45 @@ export class LhpService {
 
     // 5. Simpan LHP beserta Temuan & Rekomendasi ke Database
     return this.prisma.$transaction(async (tx) => {
-      const lhp = await tx.trLhp.create({
-        data: {
-          stId: dto.stId,
-          nomorLhp: dto.nomorLhp,
-          ringkasanEksekutif: dto.ringkasanEksekutif,
-          fileLhpSignedPath: fileLhpSignedPath,
-        },
+      // Periksa apakah sudah ada TrLhp untuk ST ini (mis. draf NHP dari AI)
+      const existingLhp = await tx.trLhp.findFirst({
+        where: { stId: dto.stId },
       });
+
+      if (existingLhp && existingLhp.signedAt) {
+        // Jika sudah ada dan sudah disahkan, maka bentrok
+        throw new ConflictException(
+          `LHP untuk Surat Tugas ini sudah pernah dibuat (LHP ID: ${existingLhp.id}).`,
+        );
+      }
+
+      // Jika sudah ada tetapi belum disahkan (draf NHP), lakukan update
+      let lhp;
+      if (existingLhp) {
+        lhp = await tx.trLhp.update({
+          where: { id: existingLhp.id },
+          data: {
+            nomorLhp: dto.nomorLhp,
+            ringkasanEksekutif: dto.ringkasanEksekutif,
+            fileLhpSignedPath: fileLhpSignedPath,
+            // pertahankan substansiNhp jika ada
+            substansiNhp: existingLhp.substansiNhp || undefined,
+            sumberPembuatan: existingLhp.sumberPembuatan || SumberPembuatan.SYSTEM,
+          },
+        });
+      } else {
+        // Tidak ada draf sebelumnya -> buat baru
+        lhp = await tx.trLhp.create({
+          data: {
+            stId: dto.stId,
+            nomorLhp: dto.nomorLhp,
+            ringkasanEksekutif: dto.ringkasanEksekutif,
+            fileLhpSignedPath: fileLhpSignedPath,
+            substansiNhp: undefined,
+            sumberPembuatan: SumberPembuatan.SYSTEM,
+          },
+        });
+      }
 
       // Simpan Temuan dan Rekomendasi
       for (const t of dto.temuan) {

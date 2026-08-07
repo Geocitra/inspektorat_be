@@ -7,6 +7,11 @@ export const CreateKkaSchema = z.object({
   stId: z
     .string({ required_error: 'Surat Tugas ID wajib diisi' })
     .uuid('Format Surat Tugas ID tidak valid'),
+  pkaId: z
+    .string()
+    .uuid('Format PKA ID tidak valid')
+    .optional()
+    .nullable(),
   prosedurPemeriksaan: z
     .string({ required_error: 'Prosedur pemeriksaan wajib diisi' })
     .min(5, 'Prosedur pemeriksaan terlalu pendek'),

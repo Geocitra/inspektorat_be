@@ -24,6 +24,7 @@ import { WbsModule } from './wbs/wbs.module';
 import { SanitizeModule } from './common/sanitize/sanitize.module';
 import { AiModule } from './common/ai/ai.module';
 import { KlinikModule } from './klinik/klinik.module';
+import { DocumentIngestionModule } from './document-ingestion/document-ingestion.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { KlinikModule } from './klinik/klinik.module';
     TlhpModule,
     WbsModule,
     KlinikModule,
+    DocumentIngestionModule,
   ],
 })
 export class AppModule {}

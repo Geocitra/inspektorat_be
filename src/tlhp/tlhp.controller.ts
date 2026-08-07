@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TlhpService } from './tlhp.service';
+import { AddendumValidatorService } from './services/addendum-validator.service';
 import { ContextualAuthGuard } from '../common/guards/contextual-auth.guard';
 import {
   CreateTindakLanjutSchema,
@@ -25,11 +26,16 @@ import {
   CreateVerifikasiDto,
   LockFindingDto,
 } from './dto/tlhp.dto';
+import { UploadAddendumSchema, UploadAddendumDto } from './dto/addendum-upload.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
 
 @Controller('api/v1')
 export class TlhpController {
-  constructor(private readonly tlhpService: TlhpService) {}
+  constructor(
+    private readonly tlhpService: TlhpService,
+    private readonly addendumValidatorService: AddendumValidatorService,
+  ) { }
 
   /**
    * POST /api/v1/tlhp
@@ -44,6 +50,21 @@ export class TlhpController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.tlhpService.createTindakLanjut(dto, file);
+  }
+
+  /**
+   * POST /api/v1/tlhp/:id/adendum/validate
+   * Mengunggah berkas adendum pengadaan (PDF/DOCX) dan dianalisis kelayakan hukumnya secara semantik oleh AI.
+   */
+  @Post('tlhp/:id/adendum/validate')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.OK)
+  validateAddendum(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+    @Body(new ZodValidationPipe(UploadAddendumSchema)) dto: UploadAddendumDto,
+  ) {
+    return this.addendumValidatorService.validateAddendum(id, file, dto);
   }
 
   /**

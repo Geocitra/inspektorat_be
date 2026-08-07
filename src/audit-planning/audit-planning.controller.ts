@@ -8,8 +8,11 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AuditPlanningService } from './audit-planning.service';
+import { RiskAssessmentService } from './services/risk-assessment.service';
+import { PkptGeneratorService } from './services/pkpt-generator.service';
 import {
   CreatePkptSchema,
   CreateAgendaSchema,
@@ -18,11 +21,21 @@ import {
   CreateAgendaDto,
   ApprovePkptDto,
 } from './dto/pkpt.dto';
+import {
+  CalculateRiskSchema,
+  GenerateDraftSchema,
+  CalculateRiskDto,
+  GenerateDraftDto,
+} from './dto/ai-planning.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
 @Controller('api/v1')
 export class AuditPlanningController {
-  constructor(private readonly auditPlanningService: AuditPlanningService) {}
+  constructor(
+    private readonly auditPlanningService: AuditPlanningService,
+    private readonly riskService: RiskAssessmentService,
+    private readonly pkptGeneratorService: PkptGeneratorService,
+  ) {}
 
   /**
    * POST /api/v1/pkpt
@@ -86,5 +99,41 @@ export class AuditPlanningController {
   @Get('agenda')
   findAllAgenda() {
     return this.auditPlanningService.findAllAgenda();
+  }
+
+  /**
+   * POST /api/v1/pkpt/calculate-risk
+   * Memicu kalkulasi penilaian risiko OPD untuk tahun tertentu.
+   */
+  @Post('pkpt/calculate-risk')
+  @HttpCode(HttpStatus.OK)
+  calculateRisk(
+    @Body(new ZodValidationPipe(CalculateRiskSchema)) dto: CalculateRiskDto,
+  ) {
+    return this.riskService.calculateRisk(dto.tahun);
+  }
+
+  /**
+   * POST /api/v1/pkpt/generate-draft
+   * Memicu generasi draf usulan PKPT & Agenda audit berbasis AI.
+   */
+  @Post('pkpt/generate-draft')
+  @HttpCode(HttpStatus.OK)
+  generateDraft(
+    @Body(new ZodValidationPipe(GenerateDraftSchema)) dto: GenerateDraftDto,
+  ) {
+    return this.pkptGeneratorService.generateDraftPkpt(
+      dto.tahunAnggaran,
+      dto.instruksiTambahan,
+    );
+  }
+
+  /**
+   * GET /api/v1/pkpt/ranking/:tahun
+   * Mengambil hasil ranking risiko OPD.
+   */
+  @Get('pkpt/ranking/:tahun')
+  getRiskRanking(@Param('tahun', ParseIntPipe) tahun: number) {
+    return this.riskService.getRiskRanking(tahun);
   }
 }

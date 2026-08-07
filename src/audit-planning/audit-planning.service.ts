@@ -11,6 +11,7 @@ import {
   CreateAgendaDto,
   ApprovePkptDto,
 } from './dto/pkpt.dto';
+import { SumberPembuatan } from '@prisma/client';
 
 @Injectable()
 export class AuditPlanningService {
@@ -19,7 +20,7 @@ export class AuditPlanningService {
   /**
    * Membuat draf PKPT baru.
    */
-  async createPkpt(dto: CreatePkptDto) {
+  async createPkpt(dto: CreatePkptDto, sumberPembuatan: SumberPembuatan = SumberPembuatan.SYSTEM, substansiDokumen: any = null) {
     const existing = await this.prisma.trPkpt.findUnique({
       where: { tahunAnggaran: dto.tahunAnggaran },
     });
@@ -33,6 +34,8 @@ export class AuditPlanningService {
       data: {
         tahunAnggaran: dto.tahunAnggaran,
         statusPkpt: 'DRAF',
+        sumberPembuatan,
+        substansiDokumen: substansiDokumen || undefined,
       },
     });
   }
@@ -41,7 +44,7 @@ export class AuditPlanningService {
    * Menambahkan agenda audit ke dalam PKPT.
    * Hanya diperbolehkan jika status PKPT masih DRAF.
    */
-  async createAgenda(dto: CreateAgendaDto) {
+  async createAgenda(dto: CreateAgendaDto, sumberPembuatan: SumberPembuatan = SumberPembuatan.SYSTEM, substansiDokumen: any = null) {
     const pkpt = await this.prisma.trPkpt.findUnique({
       where: { id: dto.pkptId },
     });
@@ -70,6 +73,8 @@ export class AuditPlanningService {
         jenisPengawasan: dto.jenisPengawasan,
         perkiraanBulan: dto.perkiraanBulan,
         estimasiAnggaran: dto.estimasiAnggaran,
+        sumberPembuatan,
+        substansiDokumen: substansiDokumen || undefined,
       },
       include: {
         opd: true,

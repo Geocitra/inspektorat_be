@@ -196,11 +196,9 @@ export class AssignmentService {
   }
 
   /**
-   * Konflik checker jadwal auditor.
-   * Query database mencari ST yang berstatus 'AKTIF'
-   * dan rentang tanggalnya bertabrakan dengan jadwal ST baru.
+   * Konflik checker jadwal auditor (Public).
    */
-  private async checkAuditorConflicts(
+  async checkAuditorConflicts(
     auditorIds: string[],
     startDate: Date,
     endDate: Date,
@@ -229,5 +227,32 @@ export class AssignmentService {
           `${formatter.format(conflictingAssignment.suratTugas.tanggalSelesai)}.`,
       );
     }
+  }
+
+  /**
+   * Mengambil daftar auditor yang tidak memiliki konflik jadwal (tidak sibuk di ST Aktif)
+   */
+  async getAvailableAuditors(startDate: Date, endDate: Date) {
+    const busyAuditors = await this.prisma.relStAuditor.findMany({
+      where: {
+        suratTugas: {
+          statusSt: 'AKTIF',
+          tanggalMulai: { lte: endDate },
+          tanggalSelesai: { gte: startDate },
+        },
+      },
+      select: {
+        auditorId: true,
+      },
+    });
+
+    const busyIds = busyAuditors.map((r) => r.auditorId);
+
+    return this.prisma.mstPegawai.findMany({
+      where: busyIds.length > 0 ? { id: { notIn: busyIds } } : {},
+      include: {
+        opd: true,
+      },
+    });
   }
 }

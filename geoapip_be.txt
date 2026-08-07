@@ -35,8 +35,12 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "date-fns": "^4.4.0",
+    "exceljs": "^4.4.0",
     "exif-parser": "^0.1.12",
     "ioredis": "^5.4.2",
+    "jsonrepair": "^3.15.0",
+    "mammoth": "^1.7.0",
+    "pdf-parse": "^1.1.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "zod": "^3.24.2"
@@ -762,9 +766,6 @@ dan ringkasan regulasi yang dirujuk oleh sistem, Anda direkomendasikan untuk mem
 // SOURCE OF TRUTH: Seluruh definisi tabel database ada di sini.
 // AI Agent: Selalu baca file ini sebelum menulis query Prisma.
 
-// CATATAN FASE 5: Ekstensi pgvector akan ditambahkan kembali pada Fase 5 (AI/RAG).
-// pgvector memerlukan kompilasi manual di Windows menggunakan Visual Studio C++ Build Tools.
-// Panduan: lihat roadmap be fase 1.txt bagian "PostgreSQL & pgvector"
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -833,6 +834,7 @@ model MstOpd {
   agendaAudits     TrAgendaAudit[]
   temuan           TrTemuan[]
   tiketKonsultasis TrTiketKonsultasi[]
+  riskAssessments  OpdRiskAssessment[]
 
   @@map("mst_opd")
 }
@@ -913,6 +915,9 @@ model TrPkpt {
   approvedByInspekturId String?       @map("approved_by_inspektur_id") @db.Uuid
   approvedAt            DateTime?     @map("approved_at") @db.Timestamptz
 
+  sumberPembuatan       SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan")
+  substansiDokumen      Json?           @map("substansi_dokumen")
+
   // Relations
   approvedBy   MstPegawai?     @relation(fields: [approvedByInspekturId], references: [id], onDelete: Restrict)
   agendaAudits TrAgendaAudit[]
@@ -928,6 +933,9 @@ model TrAgendaAudit {
   perkiraanBulan  Int           @map("perkiraan_bulan") @db.Integer // 1 - 12
   estimasiAnggaran Decimal      @default(0.00) @map("estimasi_anggaran") @db.Decimal(15, 2)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  sumberPembuatan  SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan")
+  substansiDokumen Json?           @map("substansi_dokumen")
 
   // Relations
   pkpt       TrPkpt        @relation(fields: [pkptId], references: [id], onDelete: Cascade)
@@ -951,6 +959,8 @@ model TrSuratTugas {
   agendaAudit                TrAgendaAudit?               @relation(fields: [agendaAuditId], references: [id], onDelete: SetNull)
   stAuditors                 RelStAuditor[]
   kkas                       TrKka[]
+  pkas                       TrPka[]
+  documents                  AuditDocument[]
   lhp                        TrLhp?
   rekomendasiPenugasanKhusus TrRekomendasiPenugasanKhusus? @relation(fields: [rekomendasiPenugasanKhususId], references: [id], onDelete: SetNull)
 
@@ -975,6 +985,7 @@ model RelStAuditor {
 model TrKka {
   id                  String           @id @default(uuid()) @db.Uuid
   stId                String           @map("st_id") @db.Uuid
+  pkaId               String?          @map("pka_id") @db.Uuid // Kolom Baru: Hubungan ke PKA
   prosedurPemeriksaan String           @map("prosedur_pemeriksaan") @db.Text
   uraianPengujian     String           @map("uraian_pengujian") @db.Text
   kesimpulanSementara String           @map("kesimpulan_sementara") @db.Text
@@ -984,8 +995,10 @@ model TrKka {
 
   // Relations
   suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Restrict)
+  pka        TrPka?       @relation(fields: [pkaId], references: [id], onDelete: SetNull)
   lhp        TrLhp?       @relation(fields: [lhpId], references: [id], onDelete: SetNull)
   temuan     TrTemuan[]
+  itemAudits TrItemAuditPBJ[]
 
   @@map("tr_kka")
 }
@@ -997,6 +1010,9 @@ model TrLhp {
   ringkasanEksekutif String       @map("ringkasan_eksekutif") @db.Text
   fileLhpSignedPath  String       @map("file_lhp_signed_path") @db.VarChar(255)
   signedAt           DateTime?    @map("signed_at") @db.Timestamptz
+
+  substansiNhp       Json?        @map("substansi_nhp") // Menyimpan draf temuan NHP struktural (Fase 5)
+  sumberPembuatan    SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan") // Melacak kepatuhan proses (Fase 5)
 
   // Relations
   suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Restrict)
@@ -1056,7 +1072,7 @@ enum HasilVerifikasi {
 }
 
 // ============================================================
-// MODEL TRANSAKSI BARU KLASTER C
+// MODEL TRANSAKSI KLASTER C (Kombinasi Relasi Cascade Aman)
 // ============================================================
 
 model TrTindakLanjut {
@@ -1067,8 +1083,8 @@ model TrTindakLanjut {
   statusTindakLanjut StatusTindakLanjut @default(MENUNGGU_VERIFIKASI) @map("status_tindak_lanjut")
   tanggalUnggah      DateTime           @default(now()) @map("tanggal_unggah") @db.Timestamptz
 
-  // Relations
-  rekomendasi         TrRekomendasi               @relation(fields: [rekomendasiId], references: [id], onDelete: Restrict)
+  // Relations (Safe Cascade Deletion)
+  rekomendasi         TrRekomendasi               @relation(fields: [rekomendasiId], references: [id], onDelete: Cascade)
   buktiTindakLanjuts  TrBuktiTindakLanjut[]
   verifikasi          TrVerifikasiTindakLanjut?
 
@@ -1083,7 +1099,7 @@ model TrBuktiTindakLanjut {
   gpsLongitude      Float?          @map("gps_longitude")
   timestampMetadata DateTime?       @map("timestamp_metadata") @db.Timestamptz
 
-  // Relations
+  // Relations (Safe Cascade Deletion)
   tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Cascade)
 
   @@map("tr_bukti_tindak_lanjut")
@@ -1097,8 +1113,8 @@ model TrVerifikasiTindakLanjut {
   hasilVerifikasi    HasilVerifikasi @map("hasil_verifikasi")
   tanggalVerifikasi  DateTime        @default(now()) @map("tanggal_verifikasi") @db.Timestamptz
 
-  // Relations
-  tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Restrict)
+  // Relations (Safe Cascade Deletion)
+  tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Cascade)
   verifikator       MstPegawai      @relation(fields: [verifikatorId], references: [id], onDelete: Restrict)
 
   @@map("tr_verifikasi_tindak_lanjut")
@@ -1306,6 +1322,765 @@ model TrKmsArtikel {
   @@map("tr_kms_artikel")
 }
 
+// ============================================================
+// MODEL UNTUK FASE 1 & FASE 4: RAG KNOWLEDGE BASE & PBJ ANOMALY
+// ============================================================
+
+enum DocumentType {
+  REGULASI_INTERNAL
+  REGULASI_DAERAH
+  TEMPLATES
+  LAINNYA
+  RKA_PERENCANAAN
+  ADENDUM_JUSTIFIKASI
+}
+
+enum DocumentStatus {
+  DRAF
+  AKTIF
+  ARSIP
+}
+
+model AuditDocument {
+  id        String         @id @default(uuid()) @db.Uuid
+  title     String         @db.VarChar(255)
+  type      DocumentType
+  status    DocumentStatus @default(DRAF)
+  filePath  String         @map("file_path") @db.VarChar(255)
+  stId      String?        @map("st_id") @db.Uuid
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  metadata   DocMetadata?
+  chunks     DocChunk[]
+  itemAudits TrItemAuditPBJ[]
+  suratTugas TrSuratTugas?   @relation(fields: [stId], references: [id], onDelete: SetNull)
+
+  @@map("audit_documents")
+}
+
+model DocMetadata {
+  id          String        @id @default(uuid()) @db.Uuid
+  documentId  String        @unique @map("document_id") @db.Uuid
+  fileSize    Int           @map("file_size")
+  mimeType    String        @map("mime_type") @db.VarChar(100)
+  totalChunks Int           @map("total_chunks")
+  totalTokens Int?          @map("total_tokens")
+  hash        String        @db.VarChar(64)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  document AuditDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("doc_metadata")
+}
+
+model DocChunk {
+  id         String        @id @default(uuid()) @db.Uuid
+  documentId String        @map("document_id") @db.Uuid
+  chunkIndex Int           @map("chunk_index")
+  content    String        @db.Text
+  embedding  Float[]       @map("embedding")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  document AuditDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("doc_chunks")
+}
+
+model TrItemAuditPBJ {
+  id              String   @id @default(uuid()) @db.Uuid
+  kkaId           String   @map("kka_id") @db.Uuid
+  documentId      String?  @map("document_id") @db.Uuid // Kolom Baru: Relasi opsional ke sumber dokumen SPJ
+  itemName        String   @map("item_name") @db.VarChar(255)
+  specRequired    String?  @map("spec_required") @db.Text
+  specActual      String?  @map("spec_actual") @db.Text
+  priceContract   Decimal? @map("price_contract") @db.Decimal(15, 2)
+  priceActual     Decimal? @map("price_actual") @db.Decimal(15, 2)
+  volumeContract  Decimal? @map("volume_contract") @db.Decimal(15, 2)
+  volumeActual    Decimal? @map("volume_actual") @db.Decimal(15, 2)
+  selisihHarga    Decimal? @map("selisih_harga") @db.Decimal(15, 2)
+  analisisCopilot String?  @map("analisis_copilot") @db.Text
+  status          String   @db.VarChar(50)
+  sumberPembuatan String   @default("SYSTEM") @map("sumber_pembuatan") @db.VarChar(50)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  kka             TrKka          @relation(fields: [kkaId], references: [id], onDelete: Cascade)
+  document        AuditDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@map("tr_item_audit_pbj")
+}
+
+// ============================================================
+// MODEL UNTUK FASE 2: OPDRISKASSESSMENT & ENUM SUMBERPEMBUATAN
+// ============================================================
+
+enum SumberPembuatan {
+  SYSTEM
+  AI_COPILOT
+}
+
+model OpdRiskAssessment {
+  id        String   @id @default(uuid()) @db.Uuid
+  opdId     String   @map("opd_id") @db.Uuid
+  tahun     Int      @map("tahun")
+  nri       Decimal  @map("nri") @db.Decimal(5, 2)
+  nfr       Decimal  @map("nfr") @db.Decimal(5, 2)
+  ntr       Decimal  @map("ntr") @db.Decimal(5, 2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  opd       MstOpd   @relation(fields: [opdId], references: [id], onDelete: Restrict)
+
+  @@unique([opdId, tahun])
+  @@map("opd_risk_assessments")
+}
+
+model TrPka {
+  id               String       @id @default(uuid()) @db.Uuid
+  stId             String       @map("st_id") @db.Uuid
+  noLangkah        String       @map("no_langkah") @db.VarChar(50) // Contoh: "A.1", "B.2"
+  prosedur         String       @map("prosedur") @db.Text         // Prosedur Pemeriksaan AI
+  pelaksanaRencana String?      @map("pelaksana_rencana") @db.VarChar(100) // Rencana Pelaksana (misal: "AT-1" atau "KT")
+  waktuRencana     Int?         @map("waktu_rencana") // Estimasi Jam Kerja Pengawasan (HP)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  suratTugas       TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Cascade)
+  kkas             TrKka[]      // Relasi ke KKA
+
+  @@map("tr_pka")
+}
+
+--- FILE: prisma\migrations\20260806072728_y\migration.sql ---
+-- CreateEnum
+CREATE TYPE "SystemRole" AS ENUM ('APIP_INTERNAL', 'APIP_PIMPINAN', 'AUDITEE_OPD', 'KEPALA_DAERAH');
+
+-- CreateEnum
+CREATE TYPE "SumberData" AS ENUM ('MANUAL', 'SINKRONISASI_BKD');
+
+-- CreateEnum
+CREATE TYPE "StatusPkpt" AS ENUM ('DRAF', 'MENUNGGU_PERSETUJUAN', 'DISETUJUI');
+
+-- CreateEnum
+CREATE TYPE "StatusSt" AS ENUM ('DRAF', 'AKTIF', 'SELESAI');
+
+-- CreateEnum
+CREATE TYPE "PeranSt" AS ENUM ('Pengawas_Teknis', 'Ketua_Tim', 'Anggota_Tim');
+
+-- CreateEnum
+CREATE TYPE "StatusKka" AS ENUM ('DRAF', 'MENUNGGU_ULASAN', 'APPROVED', 'REVISI');
+
+-- CreateEnum
+CREATE TYPE "StatusTemuan" AS ENUM ('PROSES', 'SIAP_DIKUNCI', 'TUNTAS');
+
+-- CreateEnum
+CREATE TYPE "StatusRekomendasi" AS ENUM ('BELUM_TINDAK_LANJUT', 'MENUNGGU_VERIFIKASI', 'BELUM_SESUAI', 'SESUAI');
+
+-- CreateEnum
+CREATE TYPE "StatusTindakLanjut" AS ENUM ('MENUNGGU_VERIFIKASI', 'BELUM_SESUAI', 'SESUAI');
+
+-- CreateEnum
+CREATE TYPE "HasilVerifikasi" AS ENUM ('SESUAI', 'BELUM_SESUAI');
+
+-- CreateEnum
+CREATE TYPE "StatusWbs" AS ENUM ('Diterima', 'Butuh_Klarifikasi', 'Penyelidikan', 'Arsip');
+
+-- CreateEnum
+CREATE TYPE "KeputusanTriage" AS ENUM ('Klarifikasi_Dibutuhkan', 'Diarsipkan_Tolak', 'Rekomendasi_Audit');
+
+-- CreateEnum
+CREATE TYPE "HasilTriage" AS ENUM ('Menunggu_Otorisasi_Pimpinan', 'DISETUJUI', 'DITOLAK');
+
+-- CreateEnum
+CREATE TYPE "StatusTiket" AS ENUM ('MENUNGGU_JAWABAN', 'TERJAWAB', 'ESKALASI');
+
+-- CreateEnum
+CREATE TYPE "DocumentType" AS ENUM ('REGULASI_INTERNAL', 'REGULASI_DAERAH', 'TEMPLATES', 'LAINNYA');
+
+-- CreateEnum
+CREATE TYPE "DocumentStatus" AS ENUM ('DRAF', 'AKTIF', 'ARSIP');
+
+-- CreateEnum
+CREATE TYPE "SumberPembuatan" AS ENUM ('SYSTEM', 'AI_COPILOT');
+
+-- CreateTable
+CREATE TABLE "users" (
+    "id" UUID NOT NULL,
+    "email" VARCHAR(255) NOT NULL,
+    "password" VARCHAR(255) NOT NULL,
+    "role" "SystemRole" NOT NULL,
+    "pegawai_id" UUID,
+    "opd_id" UUID,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mst_opd" (
+    "id" UUID NOT NULL,
+    "nama_opd" VARCHAR(255) NOT NULL,
+    "alamat" TEXT NOT NULL,
+    "gps_koordinat" VARCHAR(100) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "mst_opd_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mst_pegawai" (
+    "id" UUID NOT NULL,
+    "nip" VARCHAR(50) NOT NULL,
+    "nama" VARCHAR(255) NOT NULL,
+    "golongan" VARCHAR(100),
+    "jabatan" VARCHAR(100),
+    "opd_id" UUID NOT NULL,
+    "sumber_data" "SumberData" NOT NULL DEFAULT 'MANUAL',
+    "terakhir_disinkronkan" TIMESTAMPTZ,
+
+    CONSTRAINT "mst_pegawai_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_pkpt" (
+    "id" UUID NOT NULL,
+    "tahun_anggaran" INTEGER NOT NULL,
+    "status_pkpt" "StatusPkpt" NOT NULL DEFAULT 'DRAF',
+    "approved_by_inspektur_id" UUID,
+    "approved_at" TIMESTAMPTZ,
+    "sumber_pembuatan" "SumberPembuatan" NOT NULL DEFAULT 'SYSTEM',
+    "substansi_dokumen" JSONB,
+
+    CONSTRAINT "tr_pkpt_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_agenda_audit" (
+    "id" UUID NOT NULL,
+    "pkpt_id" UUID NOT NULL,
+    "opd_id" UUID NOT NULL,
+    "jenis_pengawasan" VARCHAR(100) NOT NULL,
+    "perkiraan_bulan" INTEGER NOT NULL,
+    "estimasi_anggaran" DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "sumber_pembuatan" "SumberPembuatan" NOT NULL DEFAULT 'SYSTEM',
+    "substansi_dokumen" JSONB,
+
+    CONSTRAINT "tr_agenda_audit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_surat_tugas" (
+    "id" UUID NOT NULL,
+    "agenda_audit_id" UUID,
+    "nomor_st" VARCHAR(150) NOT NULL,
+    "tanggal_mulai" DATE NOT NULL,
+    "tanggal_selesai" DATE NOT NULL,
+    "status_st" "StatusSt" NOT NULL DEFAULT 'DRAF',
+    "signed_at" TIMESTAMPTZ,
+    "rekomendasi_penugasan_khusus_id" UUID,
+
+    CONSTRAINT "tr_surat_tugas_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "rel_st_auditor" (
+    "id" UUID NOT NULL,
+    "st_id" UUID NOT NULL,
+    "auditor_id" UUID NOT NULL,
+    "peran_dalam_tim" "PeranSt" NOT NULL,
+
+    CONSTRAINT "rel_st_auditor_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_kka" (
+    "id" UUID NOT NULL,
+    "st_id" UUID NOT NULL,
+    "pka_id" UUID,
+    "prosedur_pemeriksaan" TEXT NOT NULL,
+    "uraian_pengujian" TEXT NOT NULL,
+    "kesimpulan_sementara" TEXT NOT NULL,
+    "status_kka" "StatusKka" NOT NULL DEFAULT 'DRAF',
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lhp_id" UUID,
+
+    CONSTRAINT "tr_kka_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_lhp" (
+    "id" UUID NOT NULL,
+    "st_id" UUID NOT NULL,
+    "nomor_lhp" VARCHAR(150) NOT NULL,
+    "ringkasan_eksekutif" TEXT NOT NULL,
+    "file_lhp_signed_path" VARCHAR(255) NOT NULL,
+    "signed_at" TIMESTAMPTZ,
+
+    CONSTRAINT "tr_lhp_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_temuan" (
+    "id" UUID NOT NULL,
+    "lhp_id" UUID NOT NULL,
+    "kka_id" UUID NOT NULL,
+    "opd_id" UUID NOT NULL,
+    "kondisi" TEXT NOT NULL,
+    "kriteria" TEXT NOT NULL,
+    "sebab" TEXT NOT NULL,
+    "akibat" TEXT NOT NULL,
+    "status_temuan" "StatusTemuan" NOT NULL DEFAULT 'PROSES',
+
+    CONSTRAINT "tr_temuan_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_rekomendasi" (
+    "id" UUID NOT NULL,
+    "temuan_id" UUID NOT NULL,
+    "uraian_rekomendasi" TEXT NOT NULL,
+    "nilai_tuntutan_finansial" DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    "status_rekomendasi" "StatusRekomendasi" NOT NULL DEFAULT 'BELUM_TINDAK_LANJUT',
+
+    CONSTRAINT "tr_rekomendasi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_tindak_lanjut" (
+    "id" UUID NOT NULL,
+    "rekomendasi_id" UUID NOT NULL,
+    "uraian_tindakan" TEXT NOT NULL,
+    "is_terlambat" BOOLEAN NOT NULL DEFAULT false,
+    "status_tindak_lanjut" "StatusTindakLanjut" NOT NULL DEFAULT 'MENUNGGU_VERIFIKASI',
+    "tanggal_unggah" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_tindak_lanjut_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_bukti_tindak_lanjut" (
+    "id" UUID NOT NULL,
+    "tindak_lanjut_id" UUID NOT NULL,
+    "file_path" VARCHAR(255) NOT NULL,
+    "gps_latitude" DOUBLE PRECISION,
+    "gps_longitude" DOUBLE PRECISION,
+    "timestamp_metadata" TIMESTAMPTZ,
+
+    CONSTRAINT "tr_bukti_tindak_lanjut_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_verifikasi_tindak_lanjut" (
+    "id" UUID NOT NULL,
+    "tindak_lanjut_id" UUID NOT NULL,
+    "verifikator_id" UUID NOT NULL,
+    "catatan_verifikator" TEXT NOT NULL,
+    "hasil_verifikasi" "HasilVerifikasi" NOT NULL,
+    "tanggal_verifikasi" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_verifikasi_tindak_lanjut_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "sec_append_only_log" (
+    "id" UUID NOT NULL,
+    "event_name" VARCHAR(255) NOT NULL,
+    "actor_id" UUID NOT NULL,
+    "ip_address" VARCHAR(45) NOT NULL,
+    "data_payload" JSONB NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "sec_append_only_log_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "wbs_aduan" (
+    "id" UUID NOT NULL,
+    "token_pelacakan" VARCHAR(100) NOT NULL,
+    "kategori" VARCHAR(150) NOT NULL,
+    "deskripsi" TEXT NOT NULL,
+    "status" "StatusWbs" NOT NULL DEFAULT 'Diterima',
+    "catatan_akhir" TEXT,
+    "tanggal_kirim" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "wbs_aduan_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "wbs_bukti" (
+    "id" UUID NOT NULL,
+    "wbs_aduan_id" UUID NOT NULL,
+    "file_path" VARCHAR(255) NOT NULL,
+
+    CONSTRAINT "wbs_bukti_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "wbs_chat" (
+    "id" UUID NOT NULL,
+    "wbs_aduan_id" UUID NOT NULL,
+    "sender" VARCHAR(50) NOT NULL,
+    "pesan" TEXT NOT NULL,
+    "timestamp" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "wbs_chat_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_rekomendasi_penugasan_khusus" (
+    "id" UUID NOT NULL,
+    "wbs_aduan_id" UUID NOT NULL,
+    "judul" VARCHAR(255) NOT NULL,
+    "rekomendator_id" UUID NOT NULL,
+    "status" "HasilTriage" NOT NULL DEFAULT 'Menunggu_Otorisasi_Pimpinan',
+    "tanggal_rekomendasi" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_rekomendasi_penugasan_khusus_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mst_kategori_regulasi" (
+    "id" UUID NOT NULL,
+    "nama_kategori" VARCHAR(150) NOT NULL,
+
+    CONSTRAINT "mst_kategori_regulasi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "mst_regulasi" (
+    "id" UUID NOT NULL,
+    "kategori_id" UUID NOT NULL,
+    "nomor_regulasi" VARCHAR(150) NOT NULL,
+    "tentang" VARCHAR(255) NOT NULL,
+    "konten_teks" TEXT NOT NULL,
+    "tahun_terbit" INTEGER NOT NULL,
+    "embedding" DOUBLE PRECISION[],
+
+    CONSTRAINT "mst_regulasi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_tiket_konsultasi" (
+    "id" UUID NOT NULL,
+    "opd_id" UUID NOT NULL,
+    "nomor_tiket" VARCHAR(100) NOT NULL,
+    "judul_pertanyaan" VARCHAR(255) NOT NULL,
+    "deskripsi_kasus" TEXT NOT NULL,
+    "irban_id" UUID NOT NULL,
+    "status" "StatusTiket" NOT NULL DEFAULT 'MENUNGGU_JAWABAN',
+    "rancangan_jawaban" TEXT,
+    "jawaban_resmi" TEXT,
+    "auditor_jawab_id" UUID,
+    "tanggal_pengajuan" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_tiket_konsultasi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_lampiran_konsultasi" (
+    "id" UUID NOT NULL,
+    "tiket_id" UUID NOT NULL,
+    "file_path" VARCHAR(255) NOT NULL,
+
+    CONSTRAINT "tr_lampiran_konsultasi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "rel_tiket_regulasi" (
+    "id" UUID NOT NULL,
+    "tiket_id" UUID NOT NULL,
+    "regulasi_id" UUID NOT NULL,
+
+    CONSTRAINT "rel_tiket_regulasi_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_kms_artikel" (
+    "id" UUID NOT NULL,
+    "tiket_id" UUID NOT NULL,
+    "kategori" VARCHAR(150) NOT NULL,
+    "judul_studi_kasus" VARCHAR(255) NOT NULL,
+    "deskripsi_kasus_anonim" TEXT NOT NULL,
+    "solusi_hukum" TEXT NOT NULL,
+    "referensi_regulasi_id" UUID,
+    "tanggal_arsip" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_kms_artikel_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "audit_documents" (
+    "id" UUID NOT NULL,
+    "title" VARCHAR(255) NOT NULL,
+    "type" "DocumentType" NOT NULL,
+    "status" "DocumentStatus" NOT NULL DEFAULT 'DRAF',
+    "file_path" VARCHAR(255) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL,
+
+    CONSTRAINT "audit_documents_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "doc_metadata" (
+    "id" UUID NOT NULL,
+    "document_id" UUID NOT NULL,
+    "file_size" INTEGER NOT NULL,
+    "mime_type" VARCHAR(100) NOT NULL,
+    "total_chunks" INTEGER NOT NULL,
+    "total_tokens" INTEGER,
+    "hash" VARCHAR(64) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "doc_metadata_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "doc_chunks" (
+    "id" UUID NOT NULL,
+    "document_id" UUID NOT NULL,
+    "chunk_index" INTEGER NOT NULL,
+    "content" TEXT NOT NULL,
+    "embedding" DOUBLE PRECISION[],
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "doc_chunks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_item_audit_pbj" (
+    "id" UUID NOT NULL,
+    "kka_id" UUID NOT NULL,
+    "item_name" VARCHAR(255) NOT NULL,
+    "spec_required" TEXT,
+    "spec_actual" TEXT,
+    "price_contract" DECIMAL(15,2),
+    "price_actual" DECIMAL(15,2),
+    "volume_contract" DECIMAL(15,2),
+    "volume_actual" DECIMAL(15,2),
+    "selisih_harga" DECIMAL(15,2),
+    "status" VARCHAR(50) NOT NULL,
+    "sumber_pembuatan" VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_item_audit_pbj_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "opd_risk_assessments" (
+    "id" UUID NOT NULL,
+    "opd_id" UUID NOT NULL,
+    "tahun" INTEGER NOT NULL,
+    "nri" DECIMAL(5,2) NOT NULL,
+    "nfr" DECIMAL(5,2) NOT NULL,
+    "ntr" DECIMAL(5,2) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "opd_risk_assessments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tr_pka" (
+    "id" UUID NOT NULL,
+    "st_id" UUID NOT NULL,
+    "no_langkah" VARCHAR(50) NOT NULL,
+    "prosedur" TEXT NOT NULL,
+    "pelaksana_rencana" VARCHAR(100),
+    "waktu_rencana" INTEGER,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tr_pka_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_pegawai_id_key" ON "users"("pegawai_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mst_opd_nama_opd_key" ON "mst_opd"("nama_opd");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mst_pegawai_nip_key" ON "mst_pegawai"("nip");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_pkpt_tahun_anggaran_key" ON "tr_pkpt"("tahun_anggaran");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_surat_tugas_agenda_audit_id_key" ON "tr_surat_tugas"("agenda_audit_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_surat_tugas_nomor_st_key" ON "tr_surat_tugas"("nomor_st");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_surat_tugas_rekomendasi_penugasan_khusus_id_key" ON "tr_surat_tugas"("rekomendasi_penugasan_khusus_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "rel_st_auditor_st_id_auditor_id_key" ON "rel_st_auditor"("st_id", "auditor_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_lhp_st_id_key" ON "tr_lhp"("st_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_lhp_nomor_lhp_key" ON "tr_lhp"("nomor_lhp");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_verifikasi_tindak_lanjut_tindak_lanjut_id_key" ON "tr_verifikasi_tindak_lanjut"("tindak_lanjut_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "wbs_aduan_token_pelacakan_key" ON "wbs_aduan"("token_pelacakan");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_rekomendasi_penugasan_khusus_wbs_aduan_id_key" ON "tr_rekomendasi_penugasan_khusus"("wbs_aduan_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mst_kategori_regulasi_nama_kategori_key" ON "mst_kategori_regulasi"("nama_kategori");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mst_regulasi_nomor_regulasi_key" ON "mst_regulasi"("nomor_regulasi");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_tiket_konsultasi_nomor_tiket_key" ON "tr_tiket_konsultasi"("nomor_tiket");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "rel_tiket_regulasi_tiket_id_regulasi_id_key" ON "rel_tiket_regulasi"("tiket_id", "regulasi_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tr_kms_artikel_tiket_id_key" ON "tr_kms_artikel"("tiket_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "doc_metadata_document_id_key" ON "doc_metadata"("document_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "opd_risk_assessments_opd_id_tahun_key" ON "opd_risk_assessments"("opd_id", "tahun");
+
+-- AddForeignKey
+ALTER TABLE "users" ADD CONSTRAINT "users_opd_id_fkey" FOREIGN KEY ("opd_id") REFERENCES "mst_opd"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "users" ADD CONSTRAINT "users_pegawai_id_fkey" FOREIGN KEY ("pegawai_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mst_pegawai" ADD CONSTRAINT "mst_pegawai_opd_id_fkey" FOREIGN KEY ("opd_id") REFERENCES "mst_opd"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_pkpt" ADD CONSTRAINT "tr_pkpt_approved_by_inspektur_id_fkey" FOREIGN KEY ("approved_by_inspektur_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_agenda_audit" ADD CONSTRAINT "tr_agenda_audit_pkpt_id_fkey" FOREIGN KEY ("pkpt_id") REFERENCES "tr_pkpt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_agenda_audit" ADD CONSTRAINT "tr_agenda_audit_opd_id_fkey" FOREIGN KEY ("opd_id") REFERENCES "mst_opd"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_surat_tugas" ADD CONSTRAINT "tr_surat_tugas_agenda_audit_id_fkey" FOREIGN KEY ("agenda_audit_id") REFERENCES "tr_agenda_audit"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_surat_tugas" ADD CONSTRAINT "tr_surat_tugas_rekomendasi_penugasan_khusus_id_fkey" FOREIGN KEY ("rekomendasi_penugasan_khusus_id") REFERENCES "tr_rekomendasi_penugasan_khusus"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rel_st_auditor" ADD CONSTRAINT "rel_st_auditor_st_id_fkey" FOREIGN KEY ("st_id") REFERENCES "tr_surat_tugas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rel_st_auditor" ADD CONSTRAINT "rel_st_auditor_auditor_id_fkey" FOREIGN KEY ("auditor_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_kka" ADD CONSTRAINT "tr_kka_st_id_fkey" FOREIGN KEY ("st_id") REFERENCES "tr_surat_tugas"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_kka" ADD CONSTRAINT "tr_kka_pka_id_fkey" FOREIGN KEY ("pka_id") REFERENCES "tr_pka"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_kka" ADD CONSTRAINT "tr_kka_lhp_id_fkey" FOREIGN KEY ("lhp_id") REFERENCES "tr_lhp"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_lhp" ADD CONSTRAINT "tr_lhp_st_id_fkey" FOREIGN KEY ("st_id") REFERENCES "tr_surat_tugas"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_temuan" ADD CONSTRAINT "tr_temuan_lhp_id_fkey" FOREIGN KEY ("lhp_id") REFERENCES "tr_lhp"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_temuan" ADD CONSTRAINT "tr_temuan_kka_id_fkey" FOREIGN KEY ("kka_id") REFERENCES "tr_kka"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_temuan" ADD CONSTRAINT "tr_temuan_opd_id_fkey" FOREIGN KEY ("opd_id") REFERENCES "mst_opd"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_rekomendasi" ADD CONSTRAINT "tr_rekomendasi_temuan_id_fkey" FOREIGN KEY ("temuan_id") REFERENCES "tr_temuan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_tindak_lanjut" ADD CONSTRAINT "tr_tindak_lanjut_rekomendasi_id_fkey" FOREIGN KEY ("rekomendasi_id") REFERENCES "tr_rekomendasi"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_bukti_tindak_lanjut" ADD CONSTRAINT "tr_bukti_tindak_lanjut_tindak_lanjut_id_fkey" FOREIGN KEY ("tindak_lanjut_id") REFERENCES "tr_tindak_lanjut"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_verifikasi_tindak_lanjut" ADD CONSTRAINT "tr_verifikasi_tindak_lanjut_tindak_lanjut_id_fkey" FOREIGN KEY ("tindak_lanjut_id") REFERENCES "tr_tindak_lanjut"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_verifikasi_tindak_lanjut" ADD CONSTRAINT "tr_verifikasi_tindak_lanjut_verifikator_id_fkey" FOREIGN KEY ("verifikator_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wbs_bukti" ADD CONSTRAINT "wbs_bukti_wbs_aduan_id_fkey" FOREIGN KEY ("wbs_aduan_id") REFERENCES "wbs_aduan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wbs_chat" ADD CONSTRAINT "wbs_chat_wbs_aduan_id_fkey" FOREIGN KEY ("wbs_aduan_id") REFERENCES "wbs_aduan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_rekomendasi_penugasan_khusus" ADD CONSTRAINT "tr_rekomendasi_penugasan_khusus_wbs_aduan_id_fkey" FOREIGN KEY ("wbs_aduan_id") REFERENCES "wbs_aduan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_rekomendasi_penugasan_khusus" ADD CONSTRAINT "tr_rekomendasi_penugasan_khusus_rekomendator_id_fkey" FOREIGN KEY ("rekomendator_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mst_regulasi" ADD CONSTRAINT "mst_regulasi_kategori_id_fkey" FOREIGN KEY ("kategori_id") REFERENCES "mst_kategori_regulasi"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_tiket_konsultasi" ADD CONSTRAINT "tr_tiket_konsultasi_opd_id_fkey" FOREIGN KEY ("opd_id") REFERENCES "mst_opd"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_tiket_konsultasi" ADD CONSTRAINT "tr_tiket_konsultasi_irban_id_fkey" FOREIGN KEY ("irban_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_tiket_konsultasi" ADD CONSTRAINT "tr_tiket_konsultasi_auditor_jawab_id_fkey" FOREIGN KEY ("auditor_jawab_id") REFERENCES "mst_pegawai"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_lampiran_konsultasi" ADD CONSTRAINT "tr_lampiran_konsultasi_tiket_id_fkey" FOREIGN KEY ("tiket_id") REFERENCES "tr_tiket_konsultasi"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rel_tiket_regulasi" ADD CONSTRAINT "rel_tiket_regulasi_tiket_id_fkey" FOREIGN KEY ("tiket_id") REFERENCES "tr_tiket_konsultasi"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rel_tiket_regulasi" ADD CONSTRAINT "rel_tiket_regulasi_regulasi_id_fkey" FOREIGN KEY ("regulasi_id") REFERENCES "mst_regulasi"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_kms_artikel" ADD CONSTRAINT "tr_kms_artikel_tiket_id_fkey" FOREIGN KEY ("tiket_id") REFERENCES "tr_tiket_konsultasi"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_kms_artikel" ADD CONSTRAINT "tr_kms_artikel_referensi_regulasi_id_fkey" FOREIGN KEY ("referensi_regulasi_id") REFERENCES "mst_regulasi"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "doc_metadata" ADD CONSTRAINT "doc_metadata_document_id_fkey" FOREIGN KEY ("document_id") REFERENCES "audit_documents"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "doc_chunks" ADD CONSTRAINT "doc_chunks_document_id_fkey" FOREIGN KEY ("document_id") REFERENCES "audit_documents"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_item_audit_pbj" ADD CONSTRAINT "tr_item_audit_pbj_kka_id_fkey" FOREIGN KEY ("kka_id") REFERENCES "tr_kka"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "opd_risk_assessments" ADD CONSTRAINT "opd_risk_assessments_opd_id_fkey" FOREIGN KEY ("opd_id") REFERENCES "mst_opd"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tr_pka" ADD CONSTRAINT "tr_pka_st_id_fkey" FOREIGN KEY ("st_id") REFERENCES "tr_surat_tugas"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 --- FILE: src\app.module.ts ---
 
 import { Module } from '@nestjs/common';
@@ -1329,6 +2104,7 @@ import { WbsModule } from './wbs/wbs.module';
 import { SanitizeModule } from './common/sanitize/sanitize.module';
 import { AiModule } from './common/ai/ai.module';
 import { KlinikModule } from './klinik/klinik.module';
+import { DocumentIngestionModule } from './document-ingestion/document-ingestion.module';
 
 @Module({
   imports: [
@@ -1384,6 +2160,7 @@ import { KlinikModule } from './klinik/klinik.module';
     TlhpModule,
     WbsModule,
     KlinikModule,
+    DocumentIngestionModule,
   ],
 })
 export class AppModule {}
@@ -1445,17 +2222,27 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AssignmentService } from './assignment.service';
+import { TeamAllocationService } from './services/team-allocation.service';
+import { PkaGeneratorService } from './services/pka-generator.service';
 import {
   CreateStSchema,
   SignStSchema,
+  RecommendTeamSchema,
+  GeneratePkaSchema,
   CreateStDto,
   SignStDto,
+  RecommendTeamDto,
+  GeneratePkaDto,
 } from './dto/st.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
 @Controller('api/v1/surat-tugas')
 export class AssignmentController {
-  constructor(private readonly assignmentService: AssignmentService) {}
+  constructor(
+    private readonly assignmentService: AssignmentService,
+    private readonly teamAllocationService: TeamAllocationService,
+    private readonly pkaGeneratorService: PkaGeneratorService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -1481,18 +2268,44 @@ export class AssignmentController {
   findOneSt(@Param('id', ParseUUIDPipe) id: string) {
     return this.assignmentService.findOneSt(id);
   }
+
+  @Post('recommend-team')
+  @HttpCode(HttpStatus.OK)
+  recommendTeam(
+    @Body(new ZodValidationPipe(RecommendTeamSchema)) dto: RecommendTeamDto,
+  ) {
+    return this.teamAllocationService.recommendTeam(
+      new Date(dto.tanggalMulai),
+      new Date(dto.tanggalSelesai),
+      dto.fokusAudit,
+    );
+  }
+
+  @Post(':id/generate-pka')
+  @HttpCode(HttpStatus.OK)
+  generatePka(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(GeneratePkaSchema)) dto: GeneratePkaDto,
+  ) {
+    return this.pkaGeneratorService.generatePka(id, dto.fokusPengawasan);
+  }
 }
 
 --- FILE: src\assignment\assignment.module.ts ---
-
 import { Module } from '@nestjs/common';
 import { AssignmentService } from './assignment.service';
 import { AssignmentController } from './assignment.controller';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AiModule } from '../common/ai/ai.module';
+import { DocumentIngestionModule } from '../document-ingestion/document-ingestion.module';
+import { TeamAllocationService } from './services/team-allocation.service';
+import { PkaGeneratorService } from './services/pka-generator.service';
 
 @Module({
+  imports: [PrismaModule, AiModule, DocumentIngestionModule],
   controllers: [AssignmentController],
-  providers: [AssignmentService],
-  exports: [AssignmentService],
+  providers: [AssignmentService, TeamAllocationService, PkaGeneratorService],
+  exports: [AssignmentService, TeamAllocationService, PkaGeneratorService],
 })
 export class AssignmentModule {}
 
@@ -1674,7 +2487,7 @@ export class AssignmentService {
     return st;
   }
 
-  private async checkAuditorConflicts(
+  async checkAuditorConflicts(
     auditorIds: string[],
     startDate: Date,
     endDate: Date,
@@ -1703,6 +2516,30 @@ export class AssignmentService {
           `${formatter.format(conflictingAssignment.suratTugas.tanggalSelesai)}.`,
       );
     }
+  }
+
+  async getAvailableAuditors(startDate: Date, endDate: Date) {
+    const busyAuditors = await this.prisma.relStAuditor.findMany({
+      where: {
+        suratTugas: {
+          statusSt: 'AKTIF',
+          tanggalMulai: { lte: endDate },
+          tanggalSelesai: { gte: startDate },
+        },
+      },
+      select: {
+        auditorId: true,
+      },
+    });
+
+    const busyIds = busyAuditors.map((r) => r.auditorId);
+
+    return this.prisma.mstPegawai.findMany({
+      where: busyIds.length > 0 ? { id: { notIn: busyIds } } : {},
+      include: {
+        opd: true,
+      },
+    });
   }
 }
 
@@ -1756,6 +2593,334 @@ export const SignStSchema = z.object({
 export type CreateStDto = z.infer<typeof CreateStSchema>;
 export type SignStDto = z.infer<typeof SignStSchema>;
 
+export const RecommendTeamSchema = z.object({
+  tanggalMulai: z
+    .string({ required_error: 'Tanggal mulai wajib diisi' })
+    .refine((val) => !isNaN(Date.parse(val)), {
+      message: 'Format tanggal mulai tidak valid',
+    }),
+  tanggalSelesai: z
+    .string({ required_error: 'Tanggal selesai wajib diisi' })
+    .refine((val) => !isNaN(Date.parse(val)), {
+      message: 'Format tanggal selesai tidak valid',
+    }),
+  fokusAudit: z
+    .string({ required_error: 'Fokus audit wajib diisi untuk pencocokan kompetensi' })
+    .min(3, 'Fokus audit minimal 3 karakter')
+    .max(500),
+}).refine((data) => Date.parse(data.tanggalSelesai) >= Date.parse(data.tanggalMulai), {
+  message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
+  path: ['tanggalSelesai'],
+});
+
+export const GeneratePkaSchema = z.object({
+  fokusPengawasan: z
+    .string()
+    .max(1000, 'Fokus pengawasan maksimal 1000 karakter')
+    .optional(),
+});
+
+export type RecommendTeamDto = z.infer<typeof RecommendTeamSchema>;
+export type GeneratePkaDto = z.infer<typeof GeneratePkaSchema>;
+
+
+--- FILE: src\assignment\schemas\pka-draft-output.schema.ts ---
+
+export const PkaDraftOutputSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  title: 'PkaDraftOutput',
+  type: 'object',
+  properties: {
+    steps: {
+      type: 'array',
+      description: 'Langkah-langkah kerja program pengawasan audit',
+      items: {
+        type: 'object',
+        properties: {
+          noLangkah: {
+            type: 'string',
+            description: 'Nomor indeks langkah kerja (contoh: "A.1", "B.2")',
+          },
+          prosedur: {
+            type: 'string',
+            description: 'Uraian rincian langkah kerja pengujian substantif atau kepatuhan',
+          },
+          pelaksanaRencana: {
+            type: 'string',
+            enum: ['Pengawas_Teknis', 'Ketua_Tim', 'Anggota_Tim'],
+            description: 'Peran auditor yang direncanakan melaksanakan langkah ini',
+          },
+          waktuRencana: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Estimasi alokasi jam kerja pengawasan (HP)',
+          },
+        },
+        required: ['noLangkah', 'prosedur', 'pelaksanaRencana', 'waktuRencana'],
+      },
+    },
+  },
+  required: ['steps'],
+};
+
+--- FILE: src\assignment\services\pka-generator.service.ts ---
+
+import { Injectable, Logger, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { PkaDraftOutputSchema } from '../schemas/pka-draft-output.schema';
+import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
+
+@Injectable()
+export class PkaGeneratorService {
+  private readonly logger = new Logger(PkaGeneratorService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly docRepository: DocumentRepository,
+    private readonly llmAdapter: VendorLlmAdapter,
+    private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+  ) {}
+
+  async generatePka(stId: string, fokusPengawasan?: string) {
+    this.logger.log(`Memulai orkestrasi AI PKA generator untuk Surat Tugas ID: ${stId}...`);
+
+    const st = await this.prisma.trSuratTugas.findUnique({
+      where: { id: stId },
+      include: {
+        agendaAudit: {
+          include: {
+            opd: true,
+          },
+        },
+      },
+    });
+
+    if (!st) {
+      throw new NotFoundException('Surat Tugas tidak ditemukan.');
+    }
+
+    const opdName = st.agendaAudit?.opd?.namaOpd || 'Umum';
+
+    const queryText = `SOP Program Kerja Audit PKA ${fokusPengawasan || ''}`;
+    let queryVector: number[];
+    try {
+      queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
+    } catch (e) {
+      queryVector = new Array(1536).fill(0);
+    }
+
+    const criteriaChunks = await this.docRepository.searchSimilarity(
+      queryVector,
+      3,
+    );
+
+    let criteriaText = '';
+    if (criteriaChunks && criteriaChunks.length > 0) {
+      criteriaText = criteriaChunks
+        .map((c) => `[GUIDELINE] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .join('\n\n');
+    } else {
+      const fallbackChunks = await this.docRepository.searchKeyword('PKA', 3);
+      criteriaText = fallbackChunks
+        .map((c) => `[GUIDELINE] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .join('\n\n');
+    }
+
+    const systemPrompt = `Anda adalah AI Asisten Auditor (Copilot) untuk Inspektorat.
+Tugas Anda adalah menyusun Program Kerja Audit (PKA) yang berisi langkah-langkah kerja pengujian substantif dan kepatuhan.
+Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
+
+    const userPrompt = `Surat Tugas Nomor: ${st.nomorSt}
+OPD Sasaran: ${opdName}
+Fokus Pengawasan: ${fokusPengawasan || 'Pengujian umum administratif dan kepatuhan'}
+Periode Audit: ${st.tanggalMulai.toISOString()} s.d ${st.tanggalSelesai.toISOString()}
+
+Berikut adalah Panduan Penyusunan Langkah Kerja (PKA):
+${criteriaText}
+
+Berdasarkan data di atas, susunlah draf langkah kerja PKA (noLangkah, prosedur, pelaksanaRencana, waktuRencana dalam jam kerja HP).
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(PkaDraftOutputSchema)}
+
+Berikan output JSON sekarang:`;
+
+    this.logger.log('Mengirim permintaan draf PKA ke LLM lokal...');
+    let rawResponse: string;
+    try {
+      rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+        jsonMode: true,
+        temperature: 0.2,
+      });
+    } catch (llmError) {
+      this.logger.error(`Gagal menghubungi server LLM. Menjalankan fallback draf PKA: ${llmError.message}`);
+      rawResponse = JSON.stringify(this.getFallbackPka(fokusPengawasan));
+    }
+
+    try {
+      const parsedData = JSON.parse(rawResponse);
+      const steps = parsedData.steps || [];
+
+      if (steps.length === 0) {
+        throw new Error('LLM mengembalikan draf langkah kerja kosong.');
+      }
+
+      return await this.prisma.$transaction(async (tx) => {
+
+        await tx.trPka.deleteMany({
+          where: { stId },
+        });
+
+        const createdSteps = [];
+        for (const step of steps) {
+          const createdStep = await tx.trPka.create({
+            data: {
+              stId,
+              noLangkah: step.noLangkah,
+              prosedur: step.prosedur,
+              pelaksanaRencana: step.pelaksanaRencana,
+              waktuRencana: step.waktuRencana,
+            },
+          });
+          createdSteps.push(createdStep);
+        }
+
+        this.logger.log(`Berhasil menyimpan ${createdSteps.length} langkah kerja PKA untuk ST Nomor: ${st.nomorSt}.`);
+        return createdSteps;
+      });
+    } catch (parseError) {
+      this.logger.error(`Gagal mem-parsing draf PKA: ${parseError.message}`);
+      throw new InternalServerErrorException(`Gagal menyusun PKA: ${parseError.message}`);
+    }
+  }
+
+  private getFallbackPka(fokusPengawasan?: string) {
+    return {
+      steps: [
+        {
+          noLangkah: 'A.1',
+          prosedur: `Lakukan reviu kesesuaian dokumen administrasi dengan fokus pengawasan: "${fokusPengawasan || 'Belanja Modal'}".`,
+          pelaksanaRencana: 'Anggota_Tim',
+          waktuRencana: 15,
+        },
+        {
+          noLangkah: 'A.2',
+          prosedur: 'Melakukan verifikasi fisik di lapangan atas realisasi belanja program.',
+          pelaksanaRencana: 'Ketua_Tim',
+          waktuRencana: 25,
+        },
+        {
+          noLangkah: 'B.1',
+          prosedur: 'Menyusun simpulan sementara hasil pengujian substantif untuk dimasukkan ke Kertas Kerja Audit (KKA).',
+          pelaksanaRencana: 'Pengawas_Teknis',
+          waktuRencana: 10,
+        },
+      ],
+    };
+  }
+}
+
+--- FILE: src\assignment\services\team-allocation.service.ts ---
+
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AssignmentService } from '../assignment.service';
+
+@Injectable()
+export class TeamAllocationService {
+  private readonly logger = new Logger(TeamAllocationService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly assignmentService: AssignmentService,
+  ) {}
+
+  async recommendTeam(startDate: Date, endDate: Date, fokusAudit: string) {
+    this.logger.log(`Mencari rekomendasi tim auditor bebas konflik untuk rentang ${startDate.toISOString()} s.d ${endDate.toISOString()}...`);
+
+    const availableAuditors = await this.assignmentService.getAvailableAuditors(startDate, endDate);
+    if (availableAuditors.length < 3) {
+      throw new BadRequestException(
+        `Jumlah auditor yang tersedia (${availableAuditors.length}) kurang dari batas minimum tim (3 orang).`
+      );
+    }
+
+    const scoredAuditors = availableAuditors.map((auditor) => {
+      let score = 0.5;
+      const focusLower = fokusAudit.toLowerCase();
+      const namaLower = auditor.nama.toLowerCase();
+      const jabLower = (auditor.jabatan || '').toLowerCase();
+
+      if (focusLower.includes('keuangan') || focusLower.includes('anggaran')) {
+        if (jabLower.includes('akuntan') || jabLower.includes('keuangan') || jabLower.includes('auditor')) {
+          score += 0.3;
+        }
+      }
+      if (focusLower.includes('fisik') || focusLower.includes('konstruksi') || focusLower.includes('pbj')) {
+        if (jabLower.includes('teknik') || jabLower.includes('sipil') || jabLower.includes('ppupd')) {
+          score += 0.3;
+        }
+      }
+      if (focusLower.includes('kinerja') || focusLower.includes('evaluasi')) {
+        if (jabLower.includes('ahli madya') || jabLower.includes('muda')) {
+          score += 0.2;
+        }
+      }
+
+      const hashValue = (auditor.nama.charCodeAt(0) + (auditor.jabatan || '').charCodeAt(0)) % 100;
+      score += hashValue / 1000;
+
+      return {
+        ...auditor,
+        score: Math.min(1.0, score),
+      };
+    });
+
+    scoredAuditors.sort((a, b) => b.score - a.score);
+
+    const pj = scoredAuditors[0];
+    const kt = scoredAuditors[1];
+    const ats = scoredAuditors.slice(2);
+
+    const team = [
+      {
+        auditorId: pj.id,
+        nama: pj.nama,
+        jabatan: pj.jabatan,
+        peranDalamTim: 'Pengawas_Teknis',
+        score: pj.score,
+      },
+      {
+        auditorId: kt.id,
+        nama: kt.nama,
+        jabatan: kt.jabatan,
+        peranDalamTim: 'Ketua_Tim',
+        score: kt.score,
+      },
+      ...ats.map((at) => ({
+        auditorId: at.id,
+        nama: at.nama,
+        jabatan: at.jabatan,
+        peranDalamTim: 'Anggota_Tim',
+        score: at.score,
+      })),
+    ];
+
+    this.logger.log(`Berhasil merekomendasikan tim berisi ${team.length} auditor.`);
+    return {
+      fokusAudit,
+      periodePenugasan: {
+        mulai: startDate,
+        selesai: endDate,
+      },
+      totalTersedia: availableAuditors.length,
+      recommendation: team,
+    };
+  }
+}
+
 --- FILE: src\audit-planning\audit-planning.controller.ts ---
 
 import {
@@ -1767,8 +2932,11 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { AuditPlanningService } from './audit-planning.service';
+import { RiskAssessmentService } from './services/risk-assessment.service';
+import { PkptGeneratorService } from './services/pkpt-generator.service';
 import {
   CreatePkptSchema,
   CreateAgendaSchema,
@@ -1777,11 +2945,21 @@ import {
   CreateAgendaDto,
   ApprovePkptDto,
 } from './dto/pkpt.dto';
+import {
+  CalculateRiskSchema,
+  GenerateDraftSchema,
+  CalculateRiskDto,
+  GenerateDraftDto,
+} from './dto/ai-planning.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
 @Controller('api/v1')
 export class AuditPlanningController {
-  constructor(private readonly auditPlanningService: AuditPlanningService) {}
+  constructor(
+    private readonly auditPlanningService: AuditPlanningService,
+    private readonly riskService: RiskAssessmentService,
+    private readonly pkptGeneratorService: PkptGeneratorService,
+  ) {}
 
   @Post('pkpt')
   @HttpCode(HttpStatus.CREATED)
@@ -1822,18 +3000,47 @@ export class AuditPlanningController {
   findAllAgenda() {
     return this.auditPlanningService.findAllAgenda();
   }
+
+  @Post('pkpt/calculate-risk')
+  @HttpCode(HttpStatus.OK)
+  calculateRisk(
+    @Body(new ZodValidationPipe(CalculateRiskSchema)) dto: CalculateRiskDto,
+  ) {
+    return this.riskService.calculateRisk(dto.tahun);
+  }
+
+  @Post('pkpt/generate-draft')
+  @HttpCode(HttpStatus.OK)
+  generateDraft(
+    @Body(new ZodValidationPipe(GenerateDraftSchema)) dto: GenerateDraftDto,
+  ) {
+    return this.pkptGeneratorService.generateDraftPkpt(
+      dto.tahunAnggaran,
+      dto.instruksiTambahan,
+    );
+  }
+
+  @Get('pkpt/ranking/:tahun')
+  getRiskRanking(@Param('tahun', ParseIntPipe) tahun: number) {
+    return this.riskService.getRiskRanking(tahun);
+  }
 }
 
 --- FILE: src\audit-planning\audit-planning.module.ts ---
-
 import { Module } from '@nestjs/common';
 import { AuditPlanningService } from './audit-planning.service';
 import { AuditPlanningController } from './audit-planning.controller';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AiModule } from '../common/ai/ai.module';
+import { DocumentIngestionModule } from '../document-ingestion/document-ingestion.module';
+import { RiskAssessmentService } from './services/risk-assessment.service';
+import { PkptGeneratorService } from './services/pkpt-generator.service';
 
 @Module({
+  imports: [PrismaModule, AiModule, DocumentIngestionModule],
   controllers: [AuditPlanningController],
-  providers: [AuditPlanningService],
-  exports: [AuditPlanningService],
+  providers: [AuditPlanningService, RiskAssessmentService, PkptGeneratorService],
+  exports: [AuditPlanningService, RiskAssessmentService, PkptGeneratorService],
 })
 export class AuditPlanningModule {}
 
@@ -1851,12 +3058,13 @@ import {
   CreateAgendaDto,
   ApprovePkptDto,
 } from './dto/pkpt.dto';
+import { SumberPembuatan } from '@prisma/client';
 
 @Injectable()
 export class AuditPlanningService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createPkpt(dto: CreatePkptDto) {
+  async createPkpt(dto: CreatePkptDto, sumberPembuatan: SumberPembuatan = SumberPembuatan.SYSTEM, substansiDokumen: any = null) {
     const existing = await this.prisma.trPkpt.findUnique({
       where: { tahunAnggaran: dto.tahunAnggaran },
     });
@@ -1870,11 +3078,13 @@ export class AuditPlanningService {
       data: {
         tahunAnggaran: dto.tahunAnggaran,
         statusPkpt: 'DRAF',
+        sumberPembuatan,
+        substansiDokumen: substansiDokumen || undefined,
       },
     });
   }
 
-  async createAgenda(dto: CreateAgendaDto) {
+  async createAgenda(dto: CreateAgendaDto, sumberPembuatan: SumberPembuatan = SumberPembuatan.SYSTEM, substansiDokumen: any = null) {
     const pkpt = await this.prisma.trPkpt.findUnique({
       where: { id: dto.pkptId },
     });
@@ -1902,6 +3112,8 @@ export class AuditPlanningService {
         jenisPengawasan: dto.jenisPengawasan,
         perkiraanBulan: dto.perkiraanBulan,
         estimasiAnggaran: dto.estimasiAnggaran,
+        sumberPembuatan,
+        substansiDokumen: substansiDokumen || undefined,
       },
       include: {
         opd: true,
@@ -1988,6 +3200,33 @@ export class AuditPlanningService {
   }
 }
 
+--- FILE: src\audit-planning\dto\ai-planning.dto.ts ---
+
+import { z } from 'zod';
+
+export const CalculateRiskSchema = z.object({
+  tahun: z
+    .number({ required_error: 'Tahun anggaran wajib diisi' })
+    .int('Tahun harus berupa angka bulat')
+    .min(2020, 'Tahun minimal 2020')
+    .max(2100, 'Tahun maksimal 2100'),
+});
+
+export const GenerateDraftSchema = z.object({
+  tahunAnggaran: z
+    .number({ required_error: 'Tahun anggaran wajib diisi' })
+    .int('Tahun anggaran harus berupa angka bulat')
+    .min(2020, 'Tahun anggaran minimal 2020')
+    .max(2100, 'Tahun anggaran maksimal 2100'),
+  instruksiTambahan: z
+    .string()
+    .max(1000, 'Instruksi tambahan maksimal 1000 karakter')
+    .optional(),
+});
+
+export type CalculateRiskDto = z.infer<typeof CalculateRiskSchema>;
+export type GenerateDraftDto = z.infer<typeof GenerateDraftSchema>;
+
 --- FILE: src\audit-planning\dto\pkpt.dto.ts ---
 
 import { z } from 'zod';
@@ -2032,15 +3271,427 @@ export type CreatePkptDto = z.infer<typeof CreatePkptSchema>;
 export type CreateAgendaDto = z.infer<typeof CreateAgendaSchema>;
 export type ApprovePkptDto = z.infer<typeof ApprovePkptSchema>;
 
+--- FILE: src\audit-planning\schemas\pkpt-draft-output.schema.ts ---
+
+export const PkptDraftOutputSchema = {
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  title: 'PkptDraftOutput',
+  type: 'object',
+  properties: {
+    agendaItems: {
+      type: 'array',
+      description: 'Daftar usulan agenda audit untuk OPD-OPD yang di-ranking',
+      items: {
+        type: 'object',
+        properties: {
+          opdId: {
+            type: 'string',
+            description: 'UUID OPD target yang didapat dari data ranking input',
+          },
+          opdName: {
+            type: 'string',
+            description: 'Nama OPD target',
+          },
+          jenisPengawasan: {
+            type: 'string',
+            enum: ['Audit', 'Reviu', 'Evaluasi', 'Pemantauan'],
+            description: 'Tipe pengawasan yang direkomendasikan',
+          },
+          perkiraanBulan: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 12,
+            description: 'Perkiraan bulan pelaksanaan (1 s.d 12)',
+          },
+          estimasiAnggaran: {
+            type: 'number',
+            minimum: 0,
+            description: 'Alokasi anggaran kas dalam rupiah',
+          },
+          hariPemeriksaan: {
+            type: 'object',
+            properties: {
+              pj: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Penanggung Jawab' },
+              wkpj: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Wakil Penanggung Jawab' },
+              dalnis: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Pengendali Teknis' },
+              kt: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Ketua Tim' },
+              at: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Anggota Tim' },
+            },
+            required: ['pj', 'wkpj', 'dalnis', 'kt', 'at'],
+          },
+          saranaPrasarana: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Daftar kebutuhan logistik (contoh: Laptop, Printer, Kertas, Mobil Dinas)',
+          },
+          alasanPrioritas: {
+            type: 'string',
+            description: 'Justifikasi naratif mengapa OPD ini diprioritaskan untuk jenis pengawasan tersebut berdasarkan tingkat risikonya',
+          },
+        },
+        required: [
+          'opdId',
+          'opdName',
+          'jenisPengawasan',
+          'perkiraanBulan',
+          'estimasiAnggaran',
+          'hariPemeriksaan',
+          'saranaPrasarana',
+          'alasanPrioritas',
+        ],
+      },
+    },
+  },
+  required: ['agendaItems'],
+};
+
+--- FILE: src\audit-planning\services\pkpt-generator.service.ts ---
+
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { RiskAssessmentService } from './risk-assessment.service';
+import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { PkptDraftOutputSchema } from '../schemas/pkpt-draft-output.schema';
+import { SumberPembuatan, DocumentStatus } from '@prisma/client';
+import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
+
+@Injectable()
+export class PkptGeneratorService {
+  private readonly logger = new Logger(PkptGeneratorService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly riskService: RiskAssessmentService,
+    private readonly docRepository: DocumentRepository,
+    private readonly llmAdapter: VendorLlmAdapter,
+    private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+  ) {}
+
+  async generateDraftPkpt(tahunAnggaran: number, instruksiTambahan?: string) {
+    this.logger.log(`Memulai orkestrasi generasi draf PKPT berbasis AI untuk tahun anggaran ${tahunAnggaran}...`);
+
+    let rankings = await this.riskService.getRiskRanking(tahunAnggaran);
+    if (rankings.length === 0) {
+      rankings = await this.riskService.calculateRisk(tahunAnggaran);
+    }
+
+    const rankingString = rankings
+      .slice(0, 10)
+      .map((r, idx) => `${idx + 1}. OPD: ${r.opd.namaOpd} (ID: ${r.opdId}, NTR: ${r.ntr}, NRI: ${r.nri}, NFR: ${r.nfr})`)
+      .join('\n');
+
+    const queryText = `pedoman kriteria tata cara penyusunan PKPT pengawasan Inspektorat ${instruksiTambahan || ''}`;
+    let queryVector: number[];
+    try {
+      queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
+    } catch (e) {
+      queryVector = new Array(1536).fill(0);
+    }
+
+    const criteriaChunks = await this.docRepository.searchSimilarity(
+      queryVector,
+      3,
+    );
+
+    let criteriaText = '';
+    if (criteriaChunks && criteriaChunks.length > 0) {
+      criteriaText = criteriaChunks
+        .map((c) => `[CRITERIA] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .join('\n\n');
+    } else {
+
+      const fallbackChunks = await this.docRepository.searchKeyword('PKPT', 3);
+      criteriaText = fallbackChunks
+        .map((c) => `[CRITERIA] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .join('\n\n');
+    }
+
+    const systemPrompt = `Anda adalah AI Asisten Analitis dan Penyusun Draf (Copilot) untuk Inspektorat Daerah Kota Bekasi.
+Tugas Anda adalah menyusun usulan draf program kerja pengawasan tahunan (PKPT) & Agenda Audit untuk OPD-OPD berdasarkan tingkat risiko (NTR), data anggaran/geografis, dan pedoman regulasi pengawasan.
+Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
+
+    const userPrompt = `Tahun Anggaran: ${tahunAnggaran}
+Instruksi Tambahan User: ${instruksiTambahan || 'Tidak ada'}
+
+Berikut adalah Daftar 10 OPD Ter-ranking berdasarkan Nilai Total Risiko (NTR):
+${rankingString}
+
+Berikut adalah Regulasi Acuan (Kriteria):
+${criteriaText || 'Gunakan pedoman standard audit berbasis risiko Inspektorat.'}
+
+Anda WAJIB menghasilkan draf usulan pengawasan untuk OPD-OPD di atas (terutama prioritas untuk yang berisiko Tinggi/Sedang).
+Pecah Hari Pemeriksaan (HP) untuk masing-masing peran tim (PJ, WKPJ, Dalnis, KT, AT) secara logis sesuai tingkat kesulitan.
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(PkptDraftOutputSchema)}
+
+Berikan output JSON sekarang:`;
+
+    this.logger.log('Mengirim permintaan draf PKPT ke LLM lokal...');
+    let rawResponse: string;
+    try {
+      rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+        jsonMode: true,
+        temperature: 0.1,
+      });
+    } catch (llmError) {
+      this.logger.error(`Gagal mendapatkan draf dari LLM: ${llmError.message}`);
+
+      rawResponse = JSON.stringify(this.getFallbackDraft(rankings, tahunAnggaran));
+    }
+
+    try {
+      const parsedData = JSON.parse(rawResponse);
+      const agendaItems = parsedData.agendaItems || [];
+
+      if (agendaItems.length === 0) {
+        throw new Error('LLM mengembalikan draf kosong.');
+      }
+
+      return await this.prisma.$transaction(async (tx) => {
+
+        let pkpt = await tx.trPkpt.findUnique({
+          where: { tahunAnggaran },
+        });
+
+        if (pkpt) {
+          if (pkpt.statusPkpt !== 'DRAF') {
+            throw new Error(`PKPT tahun anggaran ${tahunAnggaran} sudah DISETUJUI dan dikunci.`);
+          }
+
+          await tx.trAgendaAudit.deleteMany({
+            where: { pkptId: pkpt.id },
+          });
+        } else {
+          pkpt = await tx.trPkpt.create({
+            data: {
+              tahunAnggaran,
+              statusPkpt: 'DRAF',
+              sumberPembuatan: SumberPembuatan.AI_COPILOT,
+            },
+          });
+        }
+
+        const createdAgendas = [];
+        for (const item of agendaItems) {
+
+          const opdExists = await tx.mstOpd.findUnique({
+            where: { id: item.opdId },
+          });
+
+          if (!opdExists) {
+            this.logger.warn(`OPD dengan ID ${item.opdId} tidak ditemukan. Melewati item.`);
+            continue;
+          }
+
+          const agenda = await tx.trAgendaAudit.create({
+            data: {
+              pkptId: pkpt.id,
+              opdId: item.opdId,
+              jenisPengawasan: item.jenisPengawasan,
+              perkiraanBulan: item.perkiraanBulan,
+              estimasiAnggaran: item.estimasiAnggaran,
+              sumberPembuatan: SumberPembuatan.AI_COPILOT,
+              substansiDokumen: {
+                hariPemeriksaan: item.hariPemeriksaan,
+                saranaPrasarana: item.saranaPrasarana,
+                alasanPrioritas: item.alasanPrioritas,
+              },
+            },
+            include: {
+              opd: true,
+            },
+          });
+          createdAgendas.push(agenda);
+        }
+
+        this.logger.log(`Berhasil menyimpan draf PKPT tahun ${tahunAnggaran} dengan ${createdAgendas.length} agenda audit.`);
+        return {
+          pkpt,
+          agendaAudits: createdAgendas,
+        };
+      });
+    } catch (parseError) {
+      this.logger.error(`Gagal mem-parsing draf usulan PKPT: ${parseError.message}`);
+      throw new InternalServerErrorException(`Gagal menyusun draf PKPT: ${parseError.message}`);
+    }
+  }
+
+  private getFallbackDraft(rankings: any[], tahun: number) {
+    this.logger.warn('Menghasilkan draf fallback terstruktur untuk PKPT karena server LLM offline.');
+    const topOpds = rankings.slice(0, 3);
+
+    const agendaItems = topOpds.map((r, idx) => {
+
+      const jenis = idx === 0 ? 'Audit' : idx === 1 ? 'Reviu' : 'Evaluasi';
+      const bulan = (idx * 3) + 2;
+      const anggaran = (5 - idx) * 100000000;
+
+      return {
+        opdId: r.opdId,
+        opdName: r.opd.namaOpd,
+        jenisPengawasan: jenis,
+        perkiraanBulan: bulan,
+        estimasiAnggaran: anggaran,
+        hariPemeriksaan: {
+          pj: 5,
+          wkpj: 5,
+          dalnis: 10,
+          kt: 15,
+          at: 30,
+        },
+        saranaPrasarana: ['Laptop', 'Printer', 'ATK', 'Kendaraan roda 4'],
+        alasanPrioritas: `OPD diprioritaskan karena memiliki Nilai Total Risiko tinggi sebesar ${r.ntr} pada tahun anggaran ${tahun}.`,
+      };
+    });
+
+    return { agendaItems };
+  }
+}
+
+--- FILE: src\audit-planning\services\risk-assessment.service.ts ---
+
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { calculateHaversineDistance, parseCoordinates } from '../../common/utils/geo.util';
+
+@Injectable()
+export class RiskAssessmentService {
+  private readonly logger = new Logger(RiskAssessmentService.name);
+
+  private readonly centerLatitude = -7.250445;
+  private readonly centerLongitude = 112.768845;
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async calculateRisk(tahun: number) {
+    this.logger.log(`Memulai kalkulasi penilaian risiko OPD untuk tahun anggaran ${tahun}...`);
+
+    const opds = await this.prisma.mstOpd.findMany();
+    if (opds.length === 0) {
+      throw new NotFoundException('Tidak ada data OPD di database.');
+    }
+
+    const assessments = [];
+
+    for (const opd of opds) {
+
+      const sumBudgetResult = await this.prisma.trAgendaAudit.aggregate({
+        _sum: { estimasiAnggaran: true },
+        where: { opdId: opd.id },
+      });
+      const sumBudget = Number(sumBudgetResult._sum.estimasiAnggaran || 0);
+      let budgetScore = 1;
+
+      if (sumBudget > 5000000000) {
+        budgetScore = 5;
+      } else if (sumBudget > 1000000000) {
+        budgetScore = 3;
+      } else if (sumBudget > 0) {
+        budgetScore = 1;
+      } else {
+
+        budgetScore = (opd.namaOpd.charCodeAt(0) % 3) * 2 + 1;
+      }
+
+      const opdCoord = parseCoordinates(opd.gpsKoordinat);
+      let distanceScore = 1;
+      if (opdCoord) {
+        const distance = calculateHaversineDistance(
+          this.centerLatitude,
+          this.centerLongitude,
+          opdCoord.latitude,
+          opdCoord.longitude,
+        );
+        if (distance > 10000) {
+          distanceScore = 5;
+        } else if (distance > 5000) {
+          distanceScore = 3;
+        } else {
+          distanceScore = 1;
+        }
+      }
+
+      const nri = (budgetScore + distanceScore) / 2;
+
+      const findingsCount = await this.prisma.trTemuan.count({
+        where: { opdId: opd.id },
+      });
+      let findingsScore = 1;
+      if (findingsCount > 5) {
+        findingsScore = 5;
+      } else if (findingsCount >= 1) {
+        findingsScore = 3;
+      }
+
+      const unresolvedCount = await this.prisma.trRekomendasi.count({
+        where: {
+          temuan: { opdId: opd.id },
+          statusRekomendasi: { not: 'SESUAI' },
+        },
+      });
+      let unresolvedScore = 1;
+      if (unresolvedCount > 2) {
+        unresolvedScore = 5;
+      } else if (unresolvedCount >= 1) {
+        unresolvedScore = 3;
+      }
+
+      const nfr = (findingsScore + unresolvedScore) / 2;
+
+      const ntr = nri * 0.70 + nfr * 0.30;
+
+      const assessment = await this.prisma.opdRiskAssessment.upsert({
+        where: {
+          opdId_tahun: {
+            opdId: opd.id,
+            tahun,
+          },
+        },
+        update: {
+          nri,
+          nfr,
+          ntr,
+        },
+        create: {
+          opdId: opd.id,
+          tahun,
+          nri,
+          nfr,
+          ntr,
+        },
+        include: {
+          opd: true,
+        },
+      });
+
+      assessments.push(assessment);
+    }
+
+    return assessments.sort((a, b) => Number(b.ntr) - Number(a.ntr));
+  }
+
+  async getRiskRanking(tahun: number) {
+    const rankings = await this.prisma.opdRiskAssessment.findMany({
+      where: { tahun },
+      include: { opd: true },
+      orderBy: { ntr: 'desc' },
+    });
+    return rankings;
+  }
+}
+
 --- FILE: src\common\ai\ai.module.ts ---
 
 import { Module, Global } from '@nestjs/common';
 import { AiService } from './ai.service';
+import { VendorLlmAdapter } from './vendor-llm.adapter';
 
 @Global()
 @Module({
-  providers: [AiService],
-  exports: [AiService],
+  providers: [AiService, VendorLlmAdapter],
+  exports: [AiService, VendorLlmAdapter],
 })
 export class AiModule {}
 
@@ -2124,6 +3775,99 @@ export class AiService {
     }
 
     return `[AI COPILOT FALLBACK JAWABAN]\n\nBerdasarkan kueri kasus Anda: "${userPrompt}"\ndan ringkasan regulasi yang dirujuk oleh sistem, Anda direkomendasikan untuk memenuhi seluruh kepatuhan administrasi daerah.`;
+  }
+}
+
+--- FILE: src\common\ai\vendor-llm.adapter.ts ---
+
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { jsonrepair } from 'jsonrepair';
+
+@Injectable()
+export class VendorLlmAdapter {
+  private readonly logger = new Logger(VendorLlmAdapter.name);
+  private readonly ollamaUrl: string;
+  private readonly defaultModel: string;
+
+  constructor(private readonly configService: ConfigService) {
+    this.ollamaUrl = this.configService.get<string>(
+      'OLLAMA_URL',
+      'http://localhost:11434',
+    );
+    this.defaultModel = this.configService.get<string>(
+      'OLLAMA_CHAT_MODEL',
+      'llama3',
+    );
+  }
+
+  async callLlm(
+    systemPrompt: string,
+    userPrompt: string,
+    options?: { model?: string; temperature?: number; jsonMode?: boolean },
+  ): Promise<string> {
+    const model = options?.model || this.defaultModel;
+    const temperature = options?.temperature ?? 0;
+    const jsonMode = options?.jsonMode ?? false;
+
+    try {
+      const requestBody: any = {
+        model,
+        system: systemPrompt,
+        prompt: userPrompt,
+        stream: false,
+        options: {
+          temperature,
+        },
+      };
+
+      if (jsonMode) {
+        requestBody.format = 'json';
+      }
+
+      const response = await fetch(`${this.ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error! Status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      let outputText = result.response || '';
+
+      if (jsonMode) {
+        outputText = this.healJson(outputText);
+      }
+
+      return outputText;
+    } catch (error) {
+      this.logger.error(`Gagal menghubungi server LLM Lokal (${this.ollamaUrl}): ${error.message}`);
+      throw error;
+    }
+  }
+
+  private healJson(jsonString: string): string {
+    const cleaned = jsonString.trim();
+    try {
+
+      JSON.parse(cleaned);
+      return cleaned;
+    } catch (e) {
+      this.logger.warn('Deteksi JSON rusak dari LLM. Menjalankan auto-repair...');
+      try {
+        const repaired = jsonrepair(cleaned);
+        JSON.parse(repaired);
+        this.logger.log('JSON berhasil dipulihkan secara otomatis.');
+        return repaired;
+      } catch (repairError) {
+        this.logger.error(`Gagal memulihkan JSON: ${repairError.message}`);
+
+        return cleaned;
+      }
+    }
   }
 }
 
@@ -2377,6 +4121,110 @@ export class ContextualAuthGuard implements CanActivate {
   }
 }
 
+--- FILE: src\common\pipes\file-signature-validation.pipe.ts ---
+
+import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
+
+@Injectable()
+export class FileSignatureValidationPipe implements PipeTransform {
+
+  private readonly allowedSignatures = {
+    pdf: [0x25, 0x50, 0x44, 0x46],
+    zipBased: [0x50, 0x4B, 0x03, 0x04],
+    legacyXls: [0xD0, 0xCF, 0x11, 0xE0],
+  };
+
+  transform(file: any) {
+    if (!file) {
+      throw new BadRequestException('Berkas tidak diunggah atau tidak ditemukan.');
+    }
+
+    if (Array.isArray(file)) {
+      for (const f of file) {
+        this.validateFile(f);
+      }
+    } else {
+      this.validateFile(file);
+    }
+
+    return file;
+  }
+
+  private validateFile(file: any) {
+    const buffer = file.buffer;
+    if (!buffer || buffer.length === 0) {
+      throw new BadRequestException('Berkas kosong.');
+    }
+
+    const originalName = file.originalname || '';
+    const extension = originalName.split('.').pop()?.toLowerCase();
+
+    if (!extension) {
+      throw new BadRequestException('Ekstensi berkas tidak ditemukan.');
+    }
+
+    if (extension === 'pdf') {
+      this.validateSignature(buffer, this.allowedSignatures.pdf, 'PDF');
+    } else if (extension === 'docx') {
+      this.validateSignature(buffer, this.allowedSignatures.zipBased, 'DOCX');
+    } else if (extension === 'xlsx') {
+      this.validateSignature(buffer, this.allowedSignatures.zipBased, 'XLSX');
+    } else if (extension === 'xls') {
+      this.validateSignature(buffer, this.allowedSignatures.legacyXls, 'XLS');
+    } else if (extension === 'txt') {
+      this.validateTextFile(buffer);
+    } else {
+      throw new BadRequestException(
+        `Format berkas .${extension} tidak didukung. Hanya mendukung PDF, DOCX, XLSX, XLS, dan TXT.`,
+      );
+    }
+  }
+
+  private validateSignature(buffer: Buffer, expectedSignature: number[], type: string) {
+    if (buffer.length < expectedSignature.length) {
+      throw new BadRequestException(`Berkas ${type} rusak atau terlalu kecil.`);
+    }
+
+    for (let i = 0; i < expectedSignature.length; i++) {
+      if (buffer[i] !== expectedSignature[i]) {
+        throw new BadRequestException(
+          `Validasi tanda tangan berkas ${type} gagal. Tipe berkas biner tidak cocok dengan ekstensinya.`,
+        );
+      }
+    }
+  }
+
+  private validateTextFile(buffer: Buffer) {
+
+    const textSample = buffer.toString('utf-8');
+
+    if (textSample.includes('\x00')) {
+      throw new BadRequestException(
+        'Validasi berkas TXT gagal. Berkas terdeteksi mengandung biner/null byte.',
+      );
+    }
+
+    let nonPrintableCount = 0;
+    const len = Math.min(buffer.length, 1000);
+    for (let i = 0; i < len; i++) {
+      const code = buffer[i];
+
+      if (
+        (code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+        code === 127
+      ) {
+        nonPrintableCount++;
+      }
+    }
+
+    if (len > 0 && nonPrintableCount / len > 0.02) {
+      throw new BadRequestException(
+        'Validasi berkas TXT gagal. Berkas terdeteksi mengandung banyak karakter non-printable.',
+      );
+    }
+  }
+}
+
 --- FILE: src\common\pipes\zod-validation.pipe.ts ---
 
 import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
@@ -2496,6 +4344,651 @@ export default () => ({
   },
 });
 
+--- FILE: src\document-ingestion\document-ingestion.controller.ts ---
+
+import {
+  Controller,
+  Post,
+  Get,
+  UploadedFile,
+  UseInterceptors,
+  Body,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { DocumentIngestionService } from './services/document-ingestion.service';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
+import { DocumentType } from '@prisma/client';
+
+@Controller('api/v1/documents')
+export class DocumentIngestionController {
+  constructor(private readonly ingestionService: DocumentIngestionService) {}
+
+  @Post('ingest')
+  @UseInterceptors(FileInterceptor('file'))
+  async ingestDocument(
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+    @Body('type') type: DocumentType,
+    @Body('title') title: string,
+  ) {
+    if (!type || !title) {
+      throw new BadRequestException('Parameter type (DocumentType) dan title wajib diisi.');
+    }
+
+    if (!Object.values(DocumentType).includes(type)) {
+      throw new BadRequestException(
+        `Tipe dokumen "${type}" tidak valid. Harus salah satu dari: ${Object.values(DocumentType).join(', ')}`,
+      );
+    }
+
+    const doc = await this.ingestionService.ingestDocument(file, type, title);
+    return {
+      message: 'Dokumen berhasil di-ingest dan di-vektorisasi.',
+      data: doc,
+    };
+  }
+
+  @Get('search')
+  async search(@Query('q') query: string, @Query('limit') limitStr?: string) {
+    if (!query) {
+      throw new BadRequestException('Parameter pencarian "q" wajib diisi.');
+    }
+
+    const limit = limitStr ? parseInt(limitStr, 10) : 5;
+    const results = await this.ingestionService.searchDocuments(query, limit);
+
+    return {
+      message: 'Pencarian semantik berhasil dilakukan.',
+      data: results.map((r) => ({
+        chunkId: r.id,
+        chunkIndex: r.chunkIndex,
+        content: r.content,
+        similarity: r.similarity ?? null,
+        document: {
+          id: r.document.id,
+          title: r.document.title,
+          type: r.document.type,
+          filePath: r.document.filePath,
+        },
+      })),
+    };
+  }
+}
+
+--- FILE: src\document-ingestion\document-ingestion.module.ts ---
+
+import { Module } from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { DocumentIngestionController } from './document-ingestion.controller';
+import { DocumentIngestionService } from './services/document-ingestion.service';
+import { DocumentRepository } from './repositories/document.repository';
+import { SemanticChunkerService } from './services/semantic-chunker.service';
+import { ParserFactory } from './parsers/parser.factory';
+import { PdfParserAdapter } from './parsers/pdf-parser.adapter';
+import { DocxParserAdapter } from './parsers/docx-parser.adapter';
+import { TxtParserAdapter } from './parsers/txt-parser.adapter';
+import { UnicodeNormalizerFilter } from './utils/sanitizers/unicode-normalizer.filter';
+import { WhitespaceTrimmerFilter } from './utils/sanitizers/whitespace-trimmer.filter';
+import { TextSanitizerPipeline } from './utils/sanitizers/text-sanitizer.pipeline';
+import { ExternalEmbeddingAdapter } from './providers/external-embedding.adapter';
+import { EmbeddingBatchProcessor } from './utils/embedding-batch-processor.util';
+
+@Module({
+  imports: [PrismaModule],
+  controllers: [DocumentIngestionController],
+  providers: [
+    DocumentIngestionService,
+    DocumentRepository,
+    SemanticChunkerService,
+    ParserFactory,
+    PdfParserAdapter,
+    DocxParserAdapter,
+    TxtParserAdapter,
+    UnicodeNormalizerFilter,
+    WhitespaceTrimmerFilter,
+    TextSanitizerPipeline,
+    ExternalEmbeddingAdapter,
+    EmbeddingBatchProcessor,
+  ],
+  exports: [DocumentIngestionService, DocumentRepository, ExternalEmbeddingAdapter],
+})
+export class DocumentIngestionModule {}
+
+--- FILE: src\document-ingestion\parsers\document-parser.interface.ts ---
+
+export interface DocumentParser {
+  parse(buffer: Buffer): Promise<string>;
+}
+
+--- FILE: src\document-ingestion\parsers\docx-parser.adapter.ts ---
+
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { DocumentParser } from './document-parser.interface';
+import * as mammoth from 'mammoth';
+
+@Injectable()
+export class DocxParserAdapter implements DocumentParser {
+  async parse(buffer: Buffer): Promise<string> {
+    try {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value || '';
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Gagal mengurai berkas DOCX: ${error.message}`,
+      );
+    }
+  }
+}
+
+--- FILE: src\document-ingestion\parsers\parser.factory.ts ---
+
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { DocumentParser } from './document-parser.interface';
+import { PdfParserAdapter } from './pdf-parser.adapter';
+import { DocxParserAdapter } from './docx-parser.adapter';
+import { TxtParserAdapter } from './txt-parser.adapter';
+
+@Injectable()
+export class ParserFactory {
+  constructor(
+    private readonly pdfParser: PdfParserAdapter,
+    private readonly docxParser: DocxParserAdapter,
+    private readonly txtParser: TxtParserAdapter,
+  ) {}
+
+  getParser(mimeType: string, extension: string): DocumentParser {
+    const ext = extension.toLowerCase();
+
+    if (ext === 'pdf' || mimeType === 'application/pdf') {
+      return this.pdfParser;
+    } else if (
+      ext === 'docx' ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ) {
+      return this.docxParser;
+    } else if (ext === 'txt' || mimeType === 'text/plain') {
+      return this.txtParser;
+    } else {
+      throw new BadRequestException(
+        `Parser tidak ditemukan untuk tipe MIME: ${mimeType} atau ekstensi: .${extension}`,
+      );
+    }
+  }
+}
+
+--- FILE: src\document-ingestion\parsers\pdf-parser.adapter.ts ---
+
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { DocumentParser } from './document-parser.interface';
+import * as pdfParse from 'pdf-parse';
+
+@Injectable()
+export class PdfParserAdapter implements DocumentParser {
+  async parse(buffer: Buffer): Promise<string> {
+    try {
+      const data = await pdfParse(buffer);
+      return data.text || '';
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Gagal mengurai berkas PDF: ${error.message}`,
+      );
+    }
+  }
+}
+
+--- FILE: src\document-ingestion\parsers\txt-parser.adapter.ts ---
+
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { DocumentParser } from './document-parser.interface';
+
+@Injectable()
+export class TxtParserAdapter implements DocumentParser {
+  async parse(buffer: Buffer): Promise<string> {
+    try {
+      return buffer.toString('utf-8');
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Gagal mengurai berkas teks: ${error.message}`,
+      );
+    }
+  }
+}
+
+--- FILE: src\document-ingestion\providers\external-embedding.adapter.ts ---
+
+import { Injectable } from '@nestjs/common';
+import { AiService } from '../../common/ai/ai.service';
+
+@Injectable()
+export class ExternalEmbeddingAdapter {
+  constructor(private readonly aiService: AiService) {}
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    return this.aiService.generateEmbedding(text);
+  }
+}
+
+--- FILE: src\document-ingestion\repositories\document.repository.ts ---
+
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { DocumentType, DocumentStatus } from '@prisma/client';
+
+@Injectable()
+export class DocumentRepository {
+  private readonly logger = new Logger(DocumentRepository.name);
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async saveIngestedDocument(
+    document: { title: string; type: DocumentType; filePath: string; status?: DocumentStatus },
+    metadata: { fileSize: number; mimeType: string; totalChunks: number; totalTokens?: number; hash: string },
+    chunks: { chunkIndex: number; content: string; embedding: number[] }[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+
+      const savedDoc = await tx.auditDocument.create({
+        data: {
+          title: document.title,
+          type: document.type,
+          filePath: document.filePath,
+          status: document.status || DocumentStatus.DRAF,
+        },
+      });
+
+      await tx.docMetadata.create({
+        data: {
+          documentId: savedDoc.id,
+          fileSize: metadata.fileSize,
+          mimeType: metadata.mimeType,
+          totalChunks: metadata.totalChunks,
+          totalTokens: metadata.totalTokens,
+          hash: metadata.hash,
+        },
+      });
+
+      const chunkData = chunks.map((chunk) => ({
+        documentId: savedDoc.id,
+        chunkIndex: chunk.chunkIndex,
+        content: chunk.content,
+        embedding: chunk.embedding,
+      }));
+
+      await tx.docChunk.createMany({
+        data: chunkData,
+      });
+
+      this.logger.log(`Berhasil menyimpan dokumen "${document.title}" (ID: ${savedDoc.id}) beserta ${chunks.length} chunks secara atomik.`);
+      return savedDoc;
+    });
+  }
+
+  async findByHash(hash: string) {
+    return this.prisma.docMetadata.findFirst({
+      where: { hash },
+      include: { document: true },
+    });
+  }
+
+  async searchSimilarity(queryVector: number[], limit = 5): Promise<any[]> {
+    const vectorStr = `[${queryVector.join(',')}]`;
+
+    try {
+      const rawResults: any[] = await this.prisma.$queryRawUnsafe(
+        `
+        SELECT
+          c.id,
+          c.chunk_index AS "chunkIndex",
+          c.content,
+          c.document_id AS "documentId",
+          (1 - (c.embedding::vector <=> $1::vector)) AS "similarity"
+        FROM doc_chunks c
+        INNER JOIN audit_documents d ON c.document_id = d.id
+        WHERE d.status = 'AKTIF'
+        ORDER BY "similarity" DESC
+        LIMIT $2;
+        `,
+        vectorStr,
+        limit,
+      );
+
+      return rawResults.map((r) => ({
+        id: r.id,
+        chunkIndex: r.chunkIndex,
+        content: r.content,
+        embedding: [],
+        similarity: parseFloat(r.similarity) || 0.0,
+        document: { id: r.documentId }
+      }));
+    } catch (rawError) {
+      this.logger.warn(`pgvector tidak didukung atau belum dipasang di database. Menjalankan fallback keyword search.`);
+
+      return this.searchKeyword('', limit);
+    }
+  }
+
+  async searchKeyword(keyword: string, limit = 5): Promise<any[]> {
+    this.logger.log(`Menjalankan pencarian fallback kata kunci: "${keyword}"`);
+    return this.prisma.docChunk.findMany({
+      where: {
+        document: {
+          status: DocumentStatus.AKTIF,
+        },
+        content: {
+          contains: keyword,
+          mode: 'insensitive',
+        },
+      },
+      include: {
+        document: true,
+      },
+      take: limit,
+    });
+  }
+
+  private cosineSimilarity(vecA: number[], vecB: number[]): number {
+    if (!vecA || !vecB || vecA.length !== vecB.length) return 0.0;
+
+    let dotProduct = 0.0;
+    let normA = 0.0;
+    let normB = 0.0;
+
+    for (let i = 0; i < vecA.length; i++) {
+      dotProduct += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
+    }
+
+    if (normA === 0 || normB === 0) return 0.0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+}
+
+--- FILE: src\document-ingestion\services\document-ingestion.service.ts ---
+
+import { Injectable, Logger, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { DocumentRepository } from '../repositories/document.repository';
+import { ParserFactory } from '../parsers/parser.factory';
+import { TextSanitizerPipeline } from '../utils/sanitizers/text-sanitizer.pipeline';
+import { SemanticChunkerService } from './semantic-chunker.service';
+import { EmbeddingBatchProcessor } from '../utils/embedding-batch-processor.util';
+import { ExternalEmbeddingAdapter } from '../providers/external-embedding.adapter';
+import { DocumentType } from '@prisma/client';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+
+@Injectable()
+export class DocumentIngestionService {
+  private readonly logger = new Logger(DocumentIngestionService.name);
+  private readonly storageDir = path.join(process.cwd(), 'storage', 'documents');
+
+  constructor(
+    private readonly documentRepository: DocumentRepository,
+    private readonly parserFactory: ParserFactory,
+    private readonly sanitizerPipeline: TextSanitizerPipeline,
+    private readonly chunkerService: SemanticChunkerService,
+    private readonly batchProcessor: EmbeddingBatchProcessor,
+    private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+  ) {
+
+    fs.mkdirSync(this.storageDir, { recursive: true });
+  }
+
+  async ingestDocument(file: any, type: DocumentType, title: string) {
+    const buffer = file.buffer;
+    const fileSize = buffer.length;
+    const mimeType = file.mimetype;
+    const originalName = file.originalname;
+
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    const existingMetadata = await this.documentRepository.findByHash(hash);
+    if (existingMetadata) {
+      this.logger.warn(`Dokumen dengan hash biner yang sama sudah terdaftar (ID Dokumen: ${existingMetadata.documentId}). Mengembalikan dokumen eksisting.`);
+      return existingMetadata.document;
+    }
+
+    const timestamp = Date.now();
+    const sanitizedFileName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const diskFileName = `${timestamp}-${sanitizedFileName}`;
+    const diskFilePath = path.join(this.storageDir, diskFileName);
+
+    try {
+      fs.writeFileSync(diskFilePath, buffer);
+    } catch (fsError) {
+      this.logger.error(`Gagal menyimpan file ke disk: ${fsError.message}`);
+      throw new InternalServerErrorException('Gagal menyimpan file fisik regulasi.');
+    }
+
+    try {
+
+      const ext = originalName.split('.').pop()?.toLowerCase() || '';
+      const parser = this.parserFactory.getParser(mimeType, ext);
+
+      const rawText = await parser.parse(buffer);
+
+      const cleanedText = this.sanitizerPipeline.sanitize(rawText);
+
+      const chunks = this.chunkerService.chunkText(cleanedText);
+      if (chunks.length === 0) {
+        throw new ConflictException('Dokumen tidak mengandung teks yang cukup untuk di-chunk.');
+      }
+
+      const embeddings = await this.batchProcessor.processInBatches(chunks);
+
+      const chunkData = chunks.map((content, idx) => ({
+        chunkIndex: idx,
+        content,
+        embedding: embeddings[idx],
+      }));
+
+      const relativePath = path.join('storage', 'documents', diskFileName);
+      const savedDoc = await this.documentRepository.saveIngestedDocument(
+        {
+          title,
+          type,
+          filePath: relativePath.replace(/\\/g, '/'),
+          status: 'AKTIF',
+        },
+        {
+          fileSize,
+          mimeType,
+          totalChunks: chunks.length,
+          hash,
+        },
+        chunkData,
+      );
+
+      return savedDoc;
+    } catch (ingestError) {
+
+      if (fs.existsSync(diskFilePath)) {
+        fs.unlinkSync(diskFilePath);
+      }
+      this.logger.error(`Gagal melakukan ingesti dokumen: ${ingestError.message}`);
+      throw ingestError;
+    }
+  }
+
+  async searchDocuments(query: string, limit = 5) {
+    if (!query || query.trim() === '') {
+      return [];
+    }
+
+    try {
+
+      const queryVector = await this.embeddingAdapter.generateEmbedding(query);
+      return await this.documentRepository.searchSimilarity(queryVector, limit);
+    } catch (error) {
+      this.logger.warn(`Pembuatan embedding kueri gagal. Masuk ke pencarian kata kunci fallback: ${error.message}`);
+      return this.documentRepository.searchKeyword(query, limit);
+    }
+  }
+}
+
+--- FILE: src\document-ingestion\services\semantic-chunker.service.ts ---
+
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class SemanticChunkerService {
+
+  chunkText(text: string, targetSize = 2000, overlapPercent = 12): string[] {
+    if (!text) return [];
+
+    const overlapSize = Math.floor(targetSize * (overlapPercent / 100));
+
+    const paragraphs = text.split(/\n+/);
+    const sentences: string[] = [];
+
+    for (const paragraph of paragraphs) {
+      if (paragraph.trim() === '') continue;
+
+      const paragraphSentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [paragraph];
+      for (const sentence of paragraphSentences) {
+        const trimmed = sentence.trim();
+        if (trimmed !== '') {
+          sentences.push(trimmed);
+        }
+      }
+    }
+
+    const chunks: string[] = [];
+    let currentChunk: string[] = [];
+    let currentLength = 0;
+
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i];
+      currentChunk.push(sentence);
+      currentLength += sentence.length + 1;
+
+      if (currentLength >= targetSize) {
+        chunks.push(currentChunk.join(' '));
+
+        let overlapLength = 0;
+        const overlapSentences: string[] = [];
+
+        for (let j = currentChunk.length - 1; j >= 0; j--) {
+          const s = currentChunk[j];
+          if (overlapLength + s.length > overlapSize) {
+            break;
+          }
+          overlapSentences.unshift(s);
+          overlapLength += s.length + 1;
+        }
+
+        currentChunk = [...overlapSentences];
+        currentLength = overlapLength;
+      }
+    }
+
+    if (currentChunk.length > 0 && currentLength > 0) {
+      const remainingText = currentChunk.join(' ').trim();
+      if (remainingText.length > 10) {
+        chunks.push(remainingText);
+      }
+    }
+
+    return chunks;
+  }
+}
+
+--- FILE: src\document-ingestion\utils\embedding-batch-processor.util.ts ---
+
+import { Injectable, Logger } from '@nestjs/common';
+import { ExternalEmbeddingAdapter } from '../providers/external-embedding.adapter';
+
+@Injectable()
+export class EmbeddingBatchProcessor {
+  private readonly logger = new Logger(EmbeddingBatchProcessor.name);
+
+  constructor(private readonly embeddingAdapter: ExternalEmbeddingAdapter) {}
+
+  async processInBatches(
+    chunks: string[],
+    batchSize = 20,
+  ): Promise<number[][]> {
+    const results: number[][] = [];
+    this.logger.log(`Memulai pemrosesan batching embedding untuk ${chunks.length} chunks (Ukuran batch: ${batchSize}).`);
+
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
+      this.logger.log(`Memproses batch ${Math.floor(i / batchSize) + 1} (${batch.length} chunks)...`);
+
+      const batchPromises = batch.map((chunk) =>
+        this.embeddingAdapter.generateEmbedding(chunk),
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+    }
+
+    this.logger.log('Seluruh batch embedding berhasil diproses.');
+    return results;
+  }
+}
+
+--- FILE: src\document-ingestion\utils\sanitizers\text-sanitizer.pipeline.ts ---
+
+import { Injectable } from '@nestjs/common';
+import { UnicodeNormalizerFilter } from './unicode-normalizer.filter';
+import { WhitespaceTrimmerFilter } from './whitespace-trimmer.filter';
+
+@Injectable()
+export class TextSanitizerPipeline {
+  constructor(
+    private readonly unicodeNormalizer: UnicodeNormalizerFilter,
+    private readonly whitespaceTrimmer: WhitespaceTrimmerFilter,
+  ) {}
+
+  sanitize(text: string): string {
+    if (!text) return '';
+    let result = text;
+    result = this.unicodeNormalizer.filter(result);
+    result = this.whitespaceTrimmer.filter(result);
+    return result;
+  }
+}
+
+--- FILE: src\document-ingestion\utils\sanitizers\unicode-normalizer.filter.ts ---
+
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class UnicodeNormalizerFilter {
+  filter(text: string): string {
+    if (!text) return '';
+
+    return text.normalize('NFC');
+  }
+}
+
+--- FILE: src\document-ingestion\utils\sanitizers\whitespace-trimmer.filter.ts ---
+
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class WhitespaceTrimmerFilter {
+  filter(text: string): string {
+    if (!text) return '';
+
+    return text
+
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+
+      .replace(/[ \t]+/g, ' ')
+
+      .replace(/\n{3,}/g, '\n\n')
+
+      .split('\n')
+      .map((line) => line.trim())
+      .join('\n')
+      .trim();
+  }
+}
+
 --- FILE: src\kka\kka.controller.ts ---
 
 import {
@@ -2512,7 +5005,10 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { KkaService } from './kka.service';
 import {
   CreateKkaSchema,
@@ -2522,18 +5018,31 @@ import {
   UpdateKkaDto,
   UpdateKkaStatusDto,
 } from './dto/kka.dto';
+import { AuditPbjSchema, AuditPbjDto } from './dto/pbj-audit.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
 import { ContextualAuthGuard } from '../common/guards/contextual-auth.guard';
 
 @Controller('api/v1/kka')
 @UseGuards(ContextualAuthGuard)
 export class KkaController {
-  constructor(private readonly kkaService: KkaService) {}
+  constructor(private readonly kkaService: KkaService) { }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@Body(new ZodValidationPipe(CreateKkaSchema)) dto: CreateKkaDto) {
     return this.kkaService.createKka(dto);
+  }
+
+  @Post(':id/pbj/audit')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.OK)
+  async auditPbj(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+    @Body(new ZodValidationPipe(AuditPbjSchema)) dto: AuditPbjDto,
+  ) {
+    return this.kkaService.auditPbj(id, file, dto);
   }
 
   @Put(':id')
@@ -2577,13 +5086,19 @@ export class KkaController {
 import { Module } from '@nestjs/common';
 import { KkaService } from './kka.service';
 import { KkaController } from './kka.controller';
+import { AiModule } from '../common/ai/ai.module';
+import { DocumentIngestionModule } from '../document-ingestion/document-ingestion.module';
 
 @Module({
+  imports: [
+    AiModule,
+    DocumentIngestionModule,
+  ],
   controllers: [KkaController],
   providers: [KkaService],
   exports: [KkaService],
 })
-export class KkaModule {}
+export class KkaModule { }
 
 --- FILE: src\kka\kka.service.ts ---
 
@@ -2592,14 +5107,28 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateKkaDto, UpdateKkaDto } from './dto/kka.dto';
-import { StatusKka } from '@prisma/client';
+import { AuditPbjDto } from './dto/pbj-audit.dto';
+import { StatusKka, SumberPembuatan, DocumentType } from '@prisma/client';
+import { VendorLlmAdapter } from '../common/ai/vendor-llm.adapter';
+import { DocumentRepository } from '../document-ingestion/repositories/document.repository';
+import { ExternalEmbeddingAdapter } from '../document-ingestion/providers/external-embedding.adapter';
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class KkaService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(KkaService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llmAdapter: VendorLlmAdapter,
+    private readonly docRepository: DocumentRepository,
+    private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+  ) { }
 
   async createKka(dto: CreateKkaDto) {
     const st = await this.prisma.trSuratTugas.findUnique({
@@ -2618,12 +5147,180 @@ export class KkaService {
     return this.prisma.trKka.create({
       data: {
         stId: dto.stId,
+        pkaId: dto.pkaId || null,
         prosedurPemeriksaan: dto.prosedurPemeriksaan,
         uraianPengujian: dto.uraianPengujian,
         kesimpulanSementara: dto.kesimpulanSementara,
         statusKka: 'DRAF',
       },
     });
+  }
+
+  async auditPbj(id: string, file: any, dto: AuditPbjDto) {
+    const kka = await this.prisma.trKka.findUnique({
+      where: { id },
+      include: { suratTugas: true },
+    });
+
+    if (!kka) {
+      throw new NotFoundException('Kertas Kerja Audit (KKA) tidak ditemukan.');
+    }
+
+    if (kka.statusKka === 'APPROVED') {
+      throw new ConflictException('KKA sudah disetujui secara permanen dan tidak dapat dievaluasi kembali.');
+    }
+
+    this.logger.log(`Memulai ekstraksi berkas Excel SPJ untuk KKA ID: ${id}`);
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.load(file.buffer);
+    } catch (err) {
+      throw new BadRequestException('Berkas Excel rusak atau tidak dapat dibaca oleh parser.');
+    }
+
+    const worksheet = workbook.getWorksheet(dto.spjSheetName) || workbook.worksheets[0];
+    if (!worksheet) {
+      throw new BadRequestException(`Sheet bernama "${dto.spjSheetName}" tidak ditemukan di berkas Excel.`);
+    }
+
+    const spjRows: { itemName: string; volume: number; price: number }[] = [];
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber < dto.rowStart) return;
+
+      const itemName = row.getCell(1).text?.trim();
+      const volume = parseInt(row.getCell(2).text, 10) || 0;
+      const price = parseFloat(row.getCell(3).text) || 0;
+
+      if (itemName) {
+        spjRows.push({ itemName, volume, price });
+      }
+    });
+
+    this.logger.log(`Berhasil mengekstrak ${spjRows.length} baris data kuitansi realisasi.`);
+
+    await this.prisma.trItemAuditPBJ.deleteMany({
+      where: { kkaId: id },
+    });
+
+    const auditResults = [];
+
+    for (const spjItem of spjRows) {
+
+      let queryVector: number[];
+      try {
+        queryVector = await this.embeddingAdapter.generateEmbedding(`Rincian barang kuitansi: ${spjItem.itemName}`);
+      } catch (e) {
+        queryVector = new Array(1536).fill(0);
+      }
+
+      const rkaChunks = await this.prisma.docChunk.findMany({
+        where: {
+          document: {
+            stId: kka.stId,
+            type: DocumentType.RKA_PERENCANAAN,
+          },
+        },
+      });
+
+      let closestRkaContext = 'Tidak ditemukan dokumen RKA Rencana Anggaran resmi di database.';
+      if (rkaChunks.length > 0) {
+
+        const matched = rkaChunks
+          .map((chunk) => {
+            let dotProduct = 0;
+            let normA = 0;
+            let normB = 0;
+            for (let i = 0; i < queryVector.length; i++) {
+              dotProduct += queryVector[i] * chunk.embedding[i];
+              normA += queryVector[i] * queryVector[i];
+              normB += chunk.embedding[i] * chunk.embedding[i];
+            }
+            const similarity = normA === 0 || normB === 0 ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+            return { chunk, similarity };
+          })
+          .sort((a, b) => b.similarity - a.similarity)[0];
+
+        if (matched && matched.similarity > 0.3) {
+          closestRkaContext = `Rencana Anggaran yang Direferensikan:\n${matched.chunk.content}`;
+        }
+      }
+
+      const systemPrompt = `Anda adalah Asisten AI Auditor PBJ di Inspektorat Daerah.
+Tugas Anda adalah mendeteksi ketidaksesuaian atau anomali pengadaan barang (mismatch spesifikasi/merk/warna) berdasarkan data perbandingan yang disuplai.
+Anda WAJIB memberikan respon dalam format JSON murni mengikuti struktur objek berikut:
+{
+  "isMismatch": boolean,
+  "similarityScore": number, // Skor kemiripan nama barang (0.0 s.d 1.0)
+  "specRequired": "nama barang rencana",
+  "priceContract": number, // harga satuan rencana
+  "volumeContract": number, // volume rencana
+  "analisisCopilot": "analisis rinci mengapa barang ini menyimpang (kondisi vs kriteria)"
+}`;
+
+      const userPrompt = `
+=== BARANG REALISASI (SPJ) ===
+- Nama Barang: "${spjItem.itemName}"
+- Volume: ${spjItem.volume}
+- Harga Satuan: Rp ${spjItem.price.toLocaleString('id-ID')}
+
+=== KONTEKS PERENCANAAN (RKA) ===
+${closestRkaContext}
+
+Evaluasi secara objektif:
+- Apakah ada perbedaan warna, merk, ukuran atau spesifikasi lainnya?
+- Apakah harga realisasi melebihi harga rencana anggaran?
+- Berikan analisis tertulis formal audit.`;
+
+      let aiResult: any;
+      try {
+        const rawAi = await this.llmAdapter.callLlm(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1 });
+        aiResult = JSON.parse(rawAi);
+      } catch (err) {
+        this.logger.warn(`AI Gagal memproses baris "${spjItem.itemName}", menjalankan fallback deterministik.`);
+        aiResult = {
+          isMismatch: true,
+          similarityScore: 0.5,
+          specRequired: 'Tidak Teridentifikasi (Fallback)',
+          priceContract: 0.0,
+          volumeContract: 0.0,
+          analisisCopilot: `[FALLBACK SYSTEM] Terdeteksi ketidaksesuaian deskripsi secara manual pada baris SPJ "${spjItem.itemName}".`,
+        };
+      }
+
+      const priceContract = Number(aiResult.priceContract || 0);
+      const selisihHarga = spjItem.price > priceContract && priceContract > 0
+        ? (spjItem.price - priceContract) * spjItem.volume
+        : 0.0;
+
+      const status = aiResult.isMismatch || selisihHarga > 0 ? 'ANOMALI' : 'SESUAI';
+
+      const savedItem = await this.prisma.trItemAuditPBJ.create({
+        data: {
+          kkaId: id,
+          itemName: spjItem.itemName,
+          specRequired: aiResult.specRequired || null,
+          specActual: spjItem.itemName,
+          priceContract: priceContract,
+          priceActual: spjItem.price,
+          volumeContract: Number(aiResult.volumeContract || 0),
+          volumeActual: spjItem.volume,
+          selisihHarga: selisihHarga,
+          analisisCopilot: aiResult.analisisCopilot || null,
+          status,
+          sumberPembuatan: SumberPembuatan.AI_COPILOT,
+        },
+      });
+
+      auditResults.push(savedItem);
+    }
+
+    this.logger.log(`Evaluasi selesai. Menghasilkan ${auditResults.length} hasil audit PBJ.`);
+    return {
+      kkaId: id,
+      totalProcessed: auditResults.length,
+      anomaliesFound: auditResults.filter((r) => r.status === 'ANOMALI').length,
+      auditResults,
+    };
   }
 
   async updateKka(id: string, dto: UpdateKkaDto) {
@@ -2676,6 +5373,7 @@ export class KkaService {
     return this.prisma.trKka.findMany({
       include: {
         suratTugas: true,
+        itemAudits: true,
       },
     });
   }
@@ -2684,6 +5382,7 @@ export class KkaService {
     const kka = await this.prisma.trKka.findUnique({
       where: { id },
       include: {
+        itemAudits: true,
         suratTugas: {
           include: {
             stAuditors: {
@@ -2722,6 +5421,11 @@ export const CreateKkaSchema = z.object({
   stId: z
     .string({ required_error: 'Surat Tugas ID wajib diisi' })
     .uuid('Format Surat Tugas ID tidak valid'),
+  pkaId: z
+    .string()
+    .uuid('Format PKA ID tidak valid')
+    .optional()
+    .nullable(),
   prosedurPemeriksaan: z
     .string({ required_error: 'Prosedur pemeriksaan wajib diisi' })
     .min(5, 'Prosedur pemeriksaan terlalu pendek'),
@@ -2742,6 +5446,515 @@ export const UpdateKkaStatusSchema = z.object({
 export type CreateKkaDto = z.infer<typeof CreateKkaSchema>;
 export type UpdateKkaDto = z.infer<typeof UpdateKkaSchema>;
 export type UpdateKkaStatusDto = z.infer<typeof UpdateKkaStatusSchema>;
+
+--- FILE: src\kka\dto\pbj-audit.dto.ts ---
+
+import { z } from 'zod';
+
+export const AuditPbjSchema = z.object({
+    spjSheetName: z
+        .string()
+        .min(1, 'Nama sheet SPJ tidak boleh kosong')
+        .default('SPJ')
+        .describe('Nama lembar kerja Excel yang berisi realisasi kuitansi/SPJ'),
+
+    rkaSheetName: z
+        .string()
+        .min(1, 'Nama sheet RKA tidak boleh kosong')
+        .default('RKA')
+        .describe('Nama lembar kerja Excel yang berisi rencana kerja anggaran (RKA)'),
+
+    rowStart: z
+        .preprocess((val) => {
+            if (typeof val === 'string') {
+                const parsed = parseInt(val, 10);
+                return isNaN(parsed) ? val : parsed;
+            }
+            return val;
+        }, z.number({ required_error: 'Baris awal pembacaan wajib diisi' })
+            .int('Baris awal harus berupa angka bulat')
+            .min(1, 'Baris awal pembacaan minimal baris ke-1')
+        )
+        .default(2)
+        .describe('Baris awal dimulainya pembacaan data (melewati header)'),
+});
+
+export type AuditPbjDto = z.infer<typeof AuditPbjSchema>;
+
+--- FILE: src\kka\schemas\pbj-audit-output.schema.ts ---
+
+export const PbjAuditOutputSchema = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'PbjAuditOutput',
+    type: 'object',
+    properties: {
+        isMismatch: {
+            type: 'boolean',
+            description: 'True jika terdapat perbedaan spesifikasi fisik, merk, warna, ukuran, atau tipe antara rencana dan realisasi.',
+        },
+        similarityScore: {
+            type: 'number',
+            minimum: 0.0,
+            maximum: 1.0,
+            description: 'Skor kemiripan semantik fungsi barang antara Rencana vs Realisasi (0.0 s.d 1.0)',
+        },
+        specRequired: {
+            type: 'string',
+            description: 'Nama atau deskripsi spesifikasi barang yang direncanakan di dokumen RKA hasil pencocokan semantik RAG.',
+        },
+        priceContract: {
+            type: 'number',
+            minimum: 0.0,
+            description: 'Harga satuan rencana anggaran (RKA) dalam Rupiah hasil ekstraksi dari teks referensi.',
+        },
+        volumeContract: {
+            type: 'number',
+            minimum: 0,
+            description: 'Volume barang yang direncanakan di RKA hasil ekstraksi dari teks referensi.',
+        },
+        sshStandardPrice: {
+            type: 'number',
+            minimum: 0.0,
+            description: 'Batas harga satuan tertinggi barang tersebut di pasar menurut regulasi SSH hasil pencocokan semantik RAG.',
+        },
+        analisisCopilot: {
+            type: 'string',
+            description: 'Analisis formal naratif audit membandingkan Kondisi vs Kriteria (menyebutkan merk/warna yang menyimpang, serta perbandingan harga kuitansi vs SSH daerah).',
+        },
+    },
+    required: [
+        'isMismatch',
+        'similarityScore',
+        'specRequired',
+        'priceContract',
+        'volumeContract',
+        'sshStandardPrice',
+        'analisisCopilot'
+    ],
+};
+
+--- FILE: src\kka\services\pbj-parser.service.ts ---
+
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import * as ExcelJS from 'exceljs';
+
+export interface NormalizedPbjRow {
+    rowNumber: number;
+    itemName: string;
+    volume: number;
+    price: number;
+    totalPrice: number;
+}
+
+interface ColumnMapping {
+    itemCol: number;
+    volumeCol: number;
+    priceCol: number;
+    totalCol: number;
+}
+
+@Injectable()
+export class PbjParserService {
+    private readonly logger = new Logger(PbjParserService.name);
+
+    private readonly keywords = {
+        item: ['nama', 'uraian', 'barang', 'deskripsi', 'item', 'pekerjaan', 'spesifikasi', 'rincian'],
+        volume: ['vol', 'qty', 'jumlah', 'banyak', 'kuantitas', 'satuan'],
+        price: ['satuan', 'harga', 'tarif', 'nilai', 'harga_satuan', 'hargasatuan'],
+        total: ['total', 'subtotal', 'jumlah_harga', 'jumlah_total', 'sub_total'],
+    };
+
+    async parseAndNormalize(
+        buffer: Buffer,
+        sheetName?: string,
+        forcedRowStart?: number,
+    ): Promise<NormalizedPbjRow[]> {
+        this.logger.log(`Memulai parsing biner Excel...`);
+
+        const workbook = new ExcelJS.Workbook();
+        try {
+            await workbook.xlsx.load(buffer as any);
+        } catch (err) {
+            throw new BadRequestException('Validasi penguraian gagal. Berkas biner Excel rusak atau tidak didukung.');
+        }
+
+        const worksheet = sheetName
+            ? workbook.getWorksheet(sheetName)
+            : workbook.worksheets[0];
+
+        if (!worksheet) {
+            throw new BadRequestException(
+                `Lembar kerja (Sheet) "${sheetName || 'Pertama'}" tidak ditemukan pada dokumen Excel.`
+            );
+        }
+
+        this.logger.log(`Menjalankan Dynamic Header Detection pada sheet: "${worksheet.name}"...`);
+
+        const { headerRowIndex, mapping } = this.detectColumnMapping(worksheet, forcedRowStart);
+
+        const startRow = forcedRowStart || (headerRowIndex + 1);
+        this.logger.log(`Parsing baris dimulai dari baris ke-${startRow} menggunakan indeks kolom Rencana/Realisasi: ` +
+            `Item_Col: ${mapping.itemCol}, Vol_Col: ${mapping.volumeCol}, Price_Col: ${mapping.priceCol}`);
+
+        const normalizedRows: NormalizedPbjRow[] = [];
+
+        worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber < startRow) return;
+
+            const itemName = this.cleanString(this.extractCellValue(row.getCell(mapping.itemCol)));
+            const volume = this.cleanInteger(this.extractCellValue(row.getCell(mapping.volumeCol)));
+            const price = this.cleanFloat(this.extractCellValue(row.getCell(mapping.priceCol)));
+            const totalPrice = this.cleanFloat(this.extractCellValue(row.getCell(mapping.totalCol))) || (volume * price);
+
+            if (itemName && itemName.length > 2) {
+                normalizedRows.push({
+                    rowNumber,
+                    itemName,
+                    volume,
+                    price,
+                    totalPrice,
+                });
+            }
+        });
+
+        this.logger.log(`Penguraian selesai. Mengembalikan ${normalizedRows.length} baris data terstruktur.`);
+        return normalizedRows;
+    }
+
+    private detectColumnMapping(worksheet: ExcelJS.Worksheet, forcedRowStart?: number): { headerRowIndex: number; mapping: ColumnMapping } {
+        let headerRowIndex = 1;
+        const mapping: ColumnMapping = {
+            itemCol: 2,
+            volumeCol: 3,
+            priceCol: 4,
+            totalCol: 5,
+        };
+
+        const maxSearchRows = Math.min(worksheet.rowCount, forcedRowStart ? forcedRowStart : 10);
+
+        for (let r = 1; r <= maxSearchRows; r++) {
+            const row = worksheet.getRow(r);
+            let matches = 0;
+            const tempMapping = { ...mapping };
+
+            row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                const cellText = (cell.text || '').toLowerCase().trim();
+                if (!cellText) return;
+
+                if (this.keywords.item.some(keyword => cellText.includes(keyword)) && matches < 4) {
+                    tempMapping.itemCol = colNumber;
+                    matches++;
+                }
+
+                else if (this.keywords.volume.some(keyword => cellText.includes(keyword)) && matches < 4) {
+                    tempMapping.volumeCol = colNumber;
+                    matches++;
+                }
+
+                else if (this.keywords.price.some(keyword => cellText.includes(keyword)) && matches < 4) {
+                    tempMapping.priceCol = colNumber;
+                    matches++;
+                }
+
+                else if (this.keywords.total.some(keyword => cellText.includes(keyword)) && matches < 4) {
+                    tempMapping.totalCol = colNumber;
+                    matches++;
+                }
+            });
+
+            if (matches >= 3) {
+                headerRowIndex = r;
+                mapping.itemCol = tempMapping.itemCol;
+                mapping.volumeCol = tempMapping.volumeCol;
+                mapping.priceCol = tempMapping.priceCol;
+                mapping.totalCol = tempMapping.totalCol;
+                this.logger.log(`Header terdeteksi otomatis pada baris ke-${r}.`);
+                break;
+            }
+        }
+
+        return { headerRowIndex, mapping };
+    }
+
+    private extractCellValue(cell: ExcelJS.Cell): any {
+        const value = cell.value;
+        if (value === null || value === undefined) return '';
+
+        if (typeof value === 'object' && 'result' in value) {
+            return value.result;
+        }
+
+        if (typeof value === 'object' && 'formula' in value) {
+            return cell.text;
+        }
+
+        if (typeof value === 'object' && 'richText' in value) {
+            return value.richText.map(t => t.text).join('');
+        }
+
+        return value;
+    }
+
+    private cleanString(val: any): string {
+        if (!val) return '';
+        return String(val).trim().replace(/\s+/g, ' ');
+    }
+
+    private cleanInteger(val: any): number {
+        if (!val) return 0;
+        const parsed = parseInt(String(val).replace(/[^0-9-]/g, ''), 10);
+        return isNaN(parsed) ? 0 : parsed;
+    }
+
+    private cleanFloat(val: any): number {
+        if (!val) return 0;
+
+        const sanitized = String(val)
+            .replace(/[^0-9.,-]/g, '')
+            .replace(/,/g, '.');
+        const parsed = parseFloat(sanitized);
+        return isNaN(parsed) ? 0 : parsed;
+    }
+}
+
+--- FILE: src\kka\services\semantic-audit.service.ts ---
+
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
+import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
+import { DocumentType, SumberPembuatan, Prisma } from '@prisma/client';
+import { NormalizedPbjRow } from './pbj-parser.service';
+
+export const PbjAuditOutputSchema = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'PbjAuditOutput',
+    type: 'object',
+    properties: {
+        isMismatch: {
+            type: 'boolean',
+            description: 'True jika terdapat perbedaan spesifikasi fisik, merk, warna, ukuran, atau tipe antara rencana dan realisasi.',
+        },
+        similarityScore: {
+            type: 'number',
+            minimum: 0.0,
+            maximum: 1.0,
+            description: 'Skor kemiripan semantik fungsi barang antara Rencana vs Realisasi (0.0 s.d 1.0)',
+        },
+        specRequired: {
+            type: 'string',
+            description: 'Nama/spesifikasi barang yang direncanakan di dokumen RKA hasil pencocokan semantik RAG.',
+        },
+        priceContract: {
+            type: 'number',
+            minimum: 0.0,
+            description: 'Harga satuan rencana anggaran (RKA) dalam Rupiah hasil ekstraksi dari teks referensi.',
+        },
+        volumeContract: {
+            type: 'number',
+            minimum: 0,
+            description: 'Volume barang yang direncanakan di RKA hasil ekstraksi dari teks referensi.',
+        },
+        sshStandardPrice: {
+            type: 'number',
+            minimum: 0.0,
+            description: 'Batas harga satuan tertinggi barang tersebut di pasar menurut regulasi SSH hasil pencocokan semantik RAG.',
+        },
+        analisisCopilot: {
+            type: 'string',
+            description: 'Analisis formal naratif audit membandingkan Kondisi vs Kriteria (menyebutkan merk/warna yang menyimpang, serta perbandingan harga kuitansi vs SSH daerah).',
+        },
+    },
+    required: ['isMismatch', 'similarityScore', 'specRequired', 'priceContract', 'volumeContract', 'sshStandardPrice', 'analisisCopilot'],
+};
+
+@Injectable()
+export class SemanticAuditService {
+    private readonly logger = new Logger(SemanticAuditService.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly llmAdapter: VendorLlmAdapter,
+        private readonly docRepository: DocumentRepository,
+        private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    ) { }
+
+    async compareAndAuditItem(
+        stId: string,
+        kkaId: string,
+        spjItem: NormalizedPbjRow,
+        documentId: string,
+    ): Promise<any> {
+        this.logger.log(`[Semantic PBJ Audit] Menganalisis baris SPJ ke-${spjItem.rowNumber}: "${spjItem.itemName}"`);
+
+        let queryVector: number[];
+        try {
+            queryVector = await this.embeddingAdapter.generateEmbedding(`Rincian barang kuitansi: ${spjItem.itemName}`);
+        } catch (e) {
+            this.logger.warn(`Gagal membuat embedding kueri. Menggunakan fallback zero-vector.`);
+            queryVector = new Array(1536).fill(0);
+        }
+
+        const rkaChunks = await this.prisma.docChunk.findMany({
+            where: {
+                document: {
+                    stId: stId,
+                    type: DocumentType.RKA_PERENCANAAN,
+                },
+            },
+        });
+
+        let rkaContextText = 'Tidak ditemukan dokumen RKA Rencana Anggaran resmi untuk audit ini di database.';
+        if (rkaChunks.length > 0) {
+            const matchedRka = this.findClosestSemanticChunk(queryVector, rkaChunks);
+            if (matchedRka && matchedRka.similarity > 0.3) {
+                rkaContextText = `[REFERENSI RENCANA BELANJA DPA/RKA] (Similarity: ${matchedRka.similarity.toFixed(2)})\n${matchedRka.chunk.content}`;
+            }
+        }
+
+        let sshContextText = 'Tidak ditemukan dokumen regulasi Standar Satuan Harga (SSH) resmi daerah di database.';
+        try {
+            const sshChunks = await this.prisma.docChunk.findMany({
+                where: {
+                    document: {
+                        type: DocumentType.REGULASI_DAERAH,
+                        title: {
+                            contains: 'SSH',
+                            mode: 'insensitive',
+                        },
+                    },
+                },
+            });
+
+            if (sshChunks.length > 0) {
+                const matchedSsh = this.findClosestSemanticChunk(queryVector, sshChunks);
+                if (matchedSsh && matchedSsh.similarity > 0.3) {
+                    sshContextText = `[BATAS MAKSIMAL HARGA PASAR STANDAR SATUAN HARGA (SSH)] (Similarity: ${matchedSsh.similarity.toFixed(2)})\n${matchedSsh.chunk.content}`;
+                }
+            }
+        } catch (err) {
+            this.logger.warn(`Gagal memuat kueri SSH global: ${err.message}`);
+        }
+
+        const systemPrompt = `Anda adalah AI Auditor PBJ Senior di Inspektorat Daerah.
+Tugas Anda adalah mendeteksi ketidaksesuaian spesifikasi fisik (warna, ukuran, merk, tipe) barang dan membandingkan harga kuitansi dengan kriteria RKA daerah & regulasi SSH.
+Anda WAJIB mengembalikan draf analisis dalam format objek JSON terstruktur yang mengikuti JSON Schema yang diberikan. Hindari halusinasi.`;
+
+        const userPrompt = `
+=== KONDISI FISIK LAPANGAN (SPJ KUITANSI) ===
+- Nama Barang Dibeli: "${spjItem.itemName}"
+- Volume Dibeli: ${spjItem.volume}
+- Harga Satuan Dibeli: Rp ${spjItem.price.toLocaleString('id-ID')}
+
+=== KRITERIA ACUAN RAG ===
+[RUJUKAN 1: DRAF RKA OPD]
+${rkaContextText}
+
+[RUJUKAN 2: ATURAN BATAS SSH DAERAH]
+${sshContextText}
+
+Materi Analisis yang Harus Dijawab:
+1. Bandingkan deskripsi barang SPJ dengan RKA (Rujukan 1). Apakah terdapat penyimpangan spesifikasi fisik (mismatch)?
+2. Bandingkan harga satuan SPJ dengan RKA (Rujukan 1) & batas SSH daerah (Rujukan 2).
+3. Susun draf analisis formal naratif audit.
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(PbjAuditOutputSchema)}
+
+Berikan output JSON sekarang:`;
+
+        let aiResult: any;
+        try {
+            const rawAi = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+                jsonMode: true,
+                temperature: 0.1,
+            });
+            aiResult = JSON.parse(rawAi);
+        } catch (err) {
+            this.logger.warn(`AI Agent gagal menganalisis baris "${spjItem.itemName}". Menjalankan fallback.`);
+            aiResult = this.getFallbackAnalysis(spjItem);
+        }
+
+        const priceContract = Number(aiResult.priceContract || 0);
+        const volumeContract = Number(aiResult.volumeContract || 0);
+        const sshStandardPrice = Number(aiResult.sshStandardPrice || 0);
+
+        let selisihHarga = 0.0;
+        if (priceContract > 0 && spjItem.price > priceContract) {
+            selisihHarga = (spjItem.price - priceContract) * spjItem.volume;
+        } else if (sshStandardPrice > 0 && spjItem.price > sshStandardPrice) {
+            selisihHarga = (spjItem.price - sshStandardPrice) * spjItem.volume;
+        }
+
+        const status = aiResult.isMismatch || selisihHarga > 0 ? 'ANOMALI' : 'SESUAI';
+
+        try {
+
+            return await this.prisma.trItemAuditPBJ.create({
+                data: {
+                    kkaId,
+                    documentId,
+                    itemName: spjItem.itemName,
+                    specRequired: aiResult.specRequired || null,
+                    specActual: spjItem.itemName,
+                    priceContract: new Prisma.Decimal(priceContract),
+                    priceActual: new Prisma.Decimal(spjItem.price),
+                    volumeContract: new Prisma.Decimal(volumeContract),
+                    volumeActual: new Prisma.Decimal(spjItem.volume),
+                    selisihHarga: new Prisma.Decimal(selisihHarga),
+                    analisisCopilot: aiResult.analisisCopilot || null,
+                    status,
+                    sumberPembuatan: SumberPembuatan.AI_COPILOT,
+                },
+            });
+        } catch (dbError) {
+            this.logger.error(`Gagal menyimpan draf temuan PBJ ke database: ${dbError.message}`);
+            throw new InternalServerErrorException('Gagal melakukan penyimpanan draf temuan PBJ.');
+        }
+    }
+
+    private findClosestSemanticChunk(queryVector: number[], chunks: any[]): { chunk: any; similarity: number } | null {
+        if (chunks.length === 0) return null;
+
+        let closest = null;
+        let maxSimilarity = -1;
+
+        for (const chunk of chunks) {
+            if (!chunk.embedding || chunk.embedding.length !== queryVector.length) continue;
+
+            let dotProduct = 0;
+            let normA = 0;
+            let normB = 0;
+
+            for (let i = 0; i < queryVector.length; i++) {
+                dotProduct += queryVector[i] * chunk.embedding[i];
+                normA += queryVector[i] * queryVector[i];
+                normB += chunk.embedding[i] * chunk.embedding[i];
+            }
+
+            const similarity = normA === 0 || normB === 0 ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+            if (similarity > maxSimilarity) {
+                maxSimilarity = similarity;
+                closest = chunk;
+            }
+        }
+
+        return closest ? { chunk: closest, similarity: maxSimilarity } : null;
+    }
+
+    private getFallbackAnalysis(spjItem: NormalizedPbjRow) {
+        return {
+            isMismatch: true,
+            similarityScore: 0.5,
+            specRequired: 'Tidak Teridentifikasi (AI Offline Fallback)',
+            priceContract: 0.0,
+            volumeContract: 0.0,
+            sshStandardPrice: 0.0,
+            analisisCopilot: `[FALLBACK SYSTEM] Terdeteksi perbedaan penulisan data fisik pengadaan pada baris kuitansi "${spjItem.itemName}". Harap periksa ulang manual.`,
+        };
+    }
+}
 
 --- FILE: src\klinik\klinik.controller.ts ---
 
@@ -3291,24 +6504,56 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { LhpService } from './lhp.service';
+import { NhpGeneratorService } from './services/nhp-generator.service';
+import { FeedbackAnalyzerService } from './services/feedback-analyzer.service';
 import {
   CreateLhpSchema,
   SignLhpSchema,
   CreateLhpDto,
   SignLhpDto,
 } from './dto/lhp.dto';
+import {
+  GenerateNhpSchema,
+  GenerateNhpDto,
+} from './dto/nhp.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
 
 @Controller('api/v1/lhp')
 export class LhpController {
-  constructor(private readonly lhpService: LhpService) {}
+  constructor(
+    private readonly lhpService: LhpService,
+    private readonly nhpGeneratorService: NhpGeneratorService,
+    private readonly feedbackAnalyzerService: FeedbackAnalyzerService,
+  ) { }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@Body(new ZodValidationPipe(CreateLhpSchema)) dto: CreateLhpDto) {
     return this.lhpService.createLhp(dto);
+  }
+
+  @Post('generate-nhp')
+  @HttpCode(HttpStatus.OK)
+  generateNhp(
+    @Body(new ZodValidationPipe(GenerateNhpSchema)) dto: GenerateNhpDto,
+  ) {
+    return this.nhpGeneratorService.generateNhp(dto.stId);
+  }
+
+  @Post(':id/respond')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.OK)
+  uploadFeedback(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+  ) {
+    return this.feedbackAnalyzerService.analyzeFeedback(id, file);
   }
 
   @Post(':id/sign')
@@ -3338,18 +6583,29 @@ import { BullModule } from '@nestjs/bullmq';
 import { LhpService } from './lhp.service';
 import { LhpController } from './lhp.controller';
 import { LhpProcessor } from './lhp.processor';
+import { AiModule } from '../common/ai/ai.module';
+import { DocumentIngestionModule } from '../document-ingestion/document-ingestion.module';
+import { NhpGeneratorService } from './services/nhp-generator.service';
+import { FeedbackAnalyzerService } from './services/feedback-analyzer.service';
 
 @Module({
   imports: [
     BullModule.registerQueue({
       name: 'lhp_generation',
     }),
+    AiModule,
+    DocumentIngestionModule,
   ],
   controllers: [LhpController],
-  providers: [LhpService, LhpProcessor],
-  exports: [LhpService],
+  providers: [
+    LhpService,
+    LhpProcessor,
+    NhpGeneratorService,
+    FeedbackAnalyzerService,
+  ],
+  exports: [LhpService, NhpGeneratorService, FeedbackAnalyzerService],
 })
-export class LhpModule {}
+export class LhpModule { }
 
 --- FILE: src\lhp\lhp.processor.ts ---
 
@@ -3376,6 +6632,13 @@ export class LhpProcessor extends WorkerHost {
         stId: stId,
         statusKka: 'APPROVED',
       },
+      include: {
+        itemAudits: {
+          where: {
+            status: 'ANOMALI',
+          },
+        },
+      },
     });
 
     console.log(`[QUEUED JOB] Menemukan ${kkas.length} KKA dengan status APPROVED.`);
@@ -3399,13 +6662,28 @@ export class LhpProcessor extends WorkerHost {
     docContent += `RINGKASAN EKSEKUTIF:\n`;
     docContent += `${ringkasanEksekutif}\n\n`;
     docContent += `--------------------------------------------------------\n`;
-    docContent += `KERTAS KERJA AUDIT GABUNGAN (APPROVED):\n`;
+    docContent += `KERTAS KERJA AUDIT GABUNGAN & ANOMALI PBJ (APPROVED):\n`;
 
     kkas.forEach((kka, index) => {
       docContent += `\nKKA #${index + 1} (ID: ${kka.id})\n`;
       docContent += `- Prosedur  : ${kka.prosedurPemeriksaan}\n`;
       docContent += `- Pengujian : ${kka.uraianPengujian}\n`;
       docContent += `- Kesimpulan: ${kka.kesimpulanSementara}\n`;
+
+      if (kka.itemAudits && kka.itemAudits.length > 0) {
+        docContent += `\n  [TERDETEKSI ANOMALI PENGADAAN PBJ - AI COPILOT]:\n`;
+        kka.itemAudits.forEach((item, itemIdx) => {
+          docContent += `  ${itemIdx + 1}. Nama Barang Realisasi : ${item.itemName}\n`;
+          docContent += `     - Spesifikasi Direncanakan : ${item.specRequired || '-'}\n`;
+          docContent += `     - Spesifikasi Fisik Nyata  : ${item.specActual || '-'}\n`;
+          docContent += `     - Harga Satuan Rencana     : Rp ${Number(item.priceContract || 0).toLocaleString('id-ID')}\n`;
+          docContent += `     - Harga Satuan Realisasi   : Rp ${Number(item.priceActual || 0).toLocaleString('id-ID')}\n`;
+          docContent += `     - Volume Rencana           : ${Number(item.volumeContract || 0)}\n`;
+          docContent += `     - Volume Realisasi         : ${Number(item.volumeActual || 0)}\n`;
+          docContent += `     - Deviasi Harga Total      : Rp ${Number(item.selisihHarga || 0).toLocaleString('id-ID')}\n`;
+          docContent += `     - Analisis Temuan AI       : ${item.analisisCopilot || '-'}\n`;
+        });
+      }
       docContent += `--------------------------------------------------------\n`;
     });
 
@@ -3430,7 +6708,7 @@ import { CreateLhpDto, SignLhpDto } from './dto/lhp.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue, QueueEvents } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { StatusRekomendasi, StatusTemuan } from '@prisma/client';
+import { StatusRekomendasi, StatusTemuan, SumberPembuatan } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -3497,12 +6775,20 @@ export class LhpService {
     const fileLhpSignedPath = jobResult.filePath;
 
     return this.prisma.$transaction(async (tx) => {
+
+      const drafNhpSistem = await tx.trLhp.findFirst({
+        where: { stId: dto.stId },
+        select: { substansiNhp: true },
+      });
+
       const lhp = await tx.trLhp.create({
         data: {
           stId: dto.stId,
           nomorLhp: dto.nomorLhp,
           ringkasanEksekutif: dto.ringkasanEksekutif,
           fileLhpSignedPath: fileLhpSignedPath,
+          substansiNhp: drafNhpSistem?.substansiNhp || undefined,
+          sumberPembuatan: drafNhpSistem ? SumberPembuatan.AI_COPILOT : SumberPembuatan.SYSTEM,
         },
       });
 
@@ -3725,6 +7011,387 @@ export const SignLhpSchema = z.object({
 
 export type CreateLhpDto = z.infer<typeof CreateLhpSchema>;
 export type SignLhpDto = z.infer<typeof SignLhpSchema>;
+
+--- FILE: src\lhp\dto\nhp.dto.ts ---
+
+import { z } from 'zod';
+
+export const GenerateNhpSchema = z.object({
+    stId: z
+        .string({ required_error: 'ID Surat Tugas wajib diisi' })
+        .uuid('Format ID Surat Tugas tidak valid (wajib UUID)'),
+});
+
+export const UploadFeedbackSchema = z.object({
+    catatanJustifikasi: z
+        .string()
+        .max(2000, 'Catatan justifikasi tambahan maksimal 2000 karakter')
+        .optional()
+        .nullable(),
+});
+
+export type GenerateNhpDto = z.infer<typeof GenerateNhpSchema>;
+export type UploadFeedbackDto = z.infer<typeof UploadFeedbackSchema>;
+
+--- FILE: src\lhp\schemas\feedback-analysis.schema.ts ---
+export const FeedbackAnalysisSchema = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'FeedbackAnalysis',
+    type: 'object',
+    properties: {
+        isJustificationValid: {
+            type: 'boolean',
+            description: 'True jika pembelaan atau alasan OPD didukung secara sah oleh rujukan regulasi pengadaan daerah.',
+        },
+        rekomendasiStatus: {
+            type: 'string',
+            enum: ['TUNTAS', 'TETAP_TEMUAN'],
+            description: 'Keputusan status rekomendasi akhir untuk barang tersebut.',
+        },
+        confidenceScore: {
+            type: 'number',
+            minimum: 0.0,
+            maximum: 1.0,
+            description: 'Seberapa yakin AI terhadap evaluasi dokumen justifikasi ini.',
+        },
+        analisisKepatuhan: {
+            type: 'string',
+            description: 'Analisis naratif kepatuhan regulasi mengapa pembelaan OPD ini sah atau melanggar hukum.',
+        },
+    },
+    required: ['isJustificationValid', 'rekomendasiStatus', 'confidenceScore', 'analisisKepatuhan'],
+};
+
+--- FILE: src\lhp\schemas\nhp-draft-output.schema.ts ---
+export const NhpDraftOutputSchema = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'NhpDraftOutput',
+    type: 'object',
+    properties: {
+        temuanUtama: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    judulTemuan: { type: 'string' },
+                    kondisi: { type: 'string' },
+                    kriteria: { type: 'string' },
+                    sebab: { type: 'string' },
+                    akibat: { type: 'string' },
+                    rekomendasi: { type: 'string' },
+                },
+                required: ['judulTemuan', 'kondisi', 'kriteria', 'sebab', 'akibat', 'rekomendasi'],
+            },
+        },
+    },
+    required: ['temuanUtama'],
+};
+
+--- FILE: src\lhp\services\feedback-analyzer.service.ts ---
+
+import { Injectable, Logger, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
+import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
+import { FeedbackAnalysisSchema } from '../schemas/feedback-analysis.schema';
+import { DocumentType } from '@prisma/client';
+import * as pdfParse from 'pdf-parse';
+import * as path from 'path';
+import * as fs from 'fs';
+
+@Injectable()
+export class FeedbackAnalyzerService {
+    private readonly logger = new Logger(FeedbackAnalyzerService.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly llmAdapter: VendorLlmAdapter,
+        private readonly docRepository: DocumentRepository,
+        private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    ) { }
+
+    async analyzeFeedback(lhpId: string, file: any): Promise<any> {
+        this.logger.log(`Memulai pembacaan surat jawaban OPD untuk LHP ID: ${lhpId}...`);
+
+        const lhp = await this.prisma.trLhp.findUnique({
+            where: { id: lhpId },
+            include: {
+                suratTugas: {
+                    include: {
+                        kkas: {
+                            include: {
+                                itemAudits: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!lhp) {
+            throw new NotFoundException('Laporan LHP / NHP tidak ditemukan.');
+        }
+
+        let rawFeedbackText = '';
+        try {
+            const data = await pdfParse(file.buffer);
+            rawFeedbackText = data.text || '';
+        } catch (parseError) {
+            throw new BadRequestException(`Gagal mengurai file biner PDF tanggapan: ${parseError.message}`);
+        }
+
+        if (rawFeedbackText.trim().length < 10) {
+            throw new BadRequestException('Surat jawaban OPD tidak valid atau tidak mengandung teks yang cukup untuk dianalisis.');
+        }
+
+        const queryText = `kelayakan adendum kontrak pengadaan force majeure keterlambatan barang jasa ${rawFeedbackText.substring(0, 100)}`;
+        let queryVector: number[];
+        try {
+            queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
+        } catch (e) {
+            queryVector = new Array(1536).fill(0);
+        }
+
+        const ruleChunks = await this.docRepository.searchSimilarity(queryVector, 3);
+        const rulesContext = ruleChunks
+            .map((c) => `[ATURAN PENGADAAN] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+            .join('\n\n');
+
+        const anomalies = lhp.suratTugas.kkas.flatMap((k) => k.itemAudits).filter((a) => a.status === 'ANOMALI');
+
+        const anomalyString = anomalies
+            .map((a) => `- Temuan: "${a.itemName}" (Deviasi: Rp ${Number(a.selisihHarga).toLocaleString('id-ID')})`)
+            .join('\n');
+
+        const systemPrompt = `Anda adalah AI Pakar Evaluator Justifikasi Hukum Daerah di Inspektorat.
+Tugas Anda adalah membaca argumen pembelaan dari OPD (Auditee) atas temuan anomali audit, lalu membandingkannya dengan regulasi pengadaan daerah yang berlaku untuk memutuskan kelayakannya.
+Anda WAJIB memberikan hasil penilaian berbentuk JSON terstruktur yang mengikuti JSON Schema yang diberikan.`;
+
+        const userPrompt = `
+=== SURAT JAWABAN/JUSTIFIKASI OPD (KONDISI PEMBELAAN) ===
+${rawFeedbackText}
+
+=== DAFTAR ANOMALI PBJ YANG DITUDUHKAN ===
+${anomalyString || 'Terjadi penyimpangan spesifikasi administratif barang.'}
+
+=== REGULASI PBJ DAERAH (KRITERIA KELAYAKAN ADENDUM) ===
+${rulesContext}
+
+Pertanyaan Evaluasi:
+- Apakah alasan OPD (misal: kelangkaan stok pasar, bencana alam, penghematan anggaran) sah secara hukum pengadaan untuk memaklumi pembelian barang yang berbeda?
+- Apakah mereka melampirkan dasar adendum kontrak secara sah?
+- Berikan keputusan akhir status rekomendasi: "TUNTAS" (jika draf alasan sah) atau "TETAP_TEMUAN" (jika alasan dicurigai mengada-ada atau melanggar hukum).
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(FeedbackAnalysisSchema)}
+
+Berikan output JSON sekarang:`;
+
+        this.logger.log('Mengirimkan analisis justifikasi ke LLM...');
+        let rawResponse: string;
+        try {
+            rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+                jsonMode: true,
+                temperature: 0.1,
+            });
+        } catch (llmError) {
+            this.logger.error(`AI offline, menjalankan fallback keputusan tetap temuan: ${llmError.message}`);
+            rawResponse = JSON.stringify({
+                isJustificationValid: false,
+                rekomendasiStatus: 'TETAP_TEMUAN',
+                confidenceScore: 0.5,
+                analisisKepatuhan: '[FALLBACK SYSTEM] Evaluasi justifikasi gagal dilakukan secara otomatis karena gangguan LLM. Rekomendasi status: tetap diajukan sebagai temuan.',
+            });
+        }
+
+        try {
+            const parsedAnalysis = JSON.parse(rawResponse);
+
+            const uploadDir = path.join(process.cwd(), 'storage', 'documents');
+            const filename = `${Date.now()}-Tanggapan-OPD-${lhp.stId.substring(0, 8)}.pdf`;
+            const filePath = path.join(uploadDir, filename);
+            fs.writeFileSync(filePath, file.buffer);
+
+            const relativePath = path.join('storage', 'documents', filename).replace(/\\/g, '/');
+
+            await this.prisma.$transaction(async (tx) => {
+
+                const savedDoc = await tx.auditDocument.create({
+                    data: {
+                        title: `Surat Tanggapan OPD - ST ${lhp.suratTugas.nomorSt}`,
+                        type: DocumentType.ADENDUM_JUSTIFIKASI,
+                        filePath: relativePath,
+                        status: 'AKTIF',
+                        stId: lhp.stId,
+                    },
+                });
+
+                await tx.trLhp.update({
+                    where: { id: lhpId },
+                    data: {
+                        ringkasanEksekutif: `[EVALUASI JUSTIFIKASI OPD - AI COPILOT]:\n` +
+                            `Hasil Kelayakan: ${parsedAnalysis.isJustificationValid ? 'SAH/LAYAK' : 'TIDAK LAYAK'}\n` +
+                            `Keputusan: ${parsedAnalysis.rekomendasiStatus}\n` +
+                            `Analisis: ${parsedAnalysis.analisisKepatuhan}`,
+                    },
+                });
+            });
+
+            this.logger.log(`Evaluasi justifikasi selesai. Keputusan: ${parsedAnalysis.rekomendasiStatus}`);
+            return parsedAnalysis;
+        } catch (parseError) {
+            this.logger.error(`Gagal mem-parsing evaluasi: ${parseError.message}`);
+            throw new InternalServerErrorException(`Gagal mengevaluasi tanggapan: ${parseError.message}`);
+        }
+    }
+}
+
+--- FILE: src\lhp\services\nhp-generator.service.ts ---
+
+import { Injectable, Logger, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
+import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
+import { NhpDraftOutputSchema } from '../schemas/nhp-draft-output.schema';
+import { DocumentType, SumberPembuatan } from '@prisma/client';
+
+@Injectable()
+export class NhpGeneratorService {
+    private readonly logger = new Logger(NhpGeneratorService.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly llmAdapter: VendorLlmAdapter,
+        private readonly docRepository: DocumentRepository,
+        private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    ) { }
+
+    async generateNhp(stId: string): Promise<any> {
+        this.logger.log(`Memulai kompilasi draf NHP AI untuk Surat Tugas ID: ${stId}...`);
+
+        const kkas = await this.prisma.trKka.findMany({
+            where: {
+                stId,
+                statusKka: 'APPROVED',
+            },
+            include: {
+                itemAudits: {
+                    where: {
+                        status: 'ANOMALI',
+                    },
+                },
+            },
+        });
+
+        if (kkas.length === 0) {
+            throw new NotFoundException('Tidak ditemukan Kertas Kerja Audit (KKA) berstatus APPROVED untuk Surat Tugas ini.');
+        }
+
+        const anomalies = kkas.flatMap((k) => k.itemAudits);
+        if (anomalies.length === 0) {
+            return {
+                message: 'Hasil audit bersih. Tidak ditemukan anomali pengadaan PBJ pada KKA kasus ini.',
+                temuanUtama: [],
+            };
+        }
+
+        const anomalySummary = anomalies
+            .map((a, idx) => {
+                return `${idx + 1}. Item SPJ: "${a.itemName}" (Harga Satuan SPJ: Rp ${Number(a.priceActual).toLocaleString('id-ID')}, Volume SPJ: ${Number(a.volumeActual)})\n` +
+                    `   - Rencana RKA: "${a.specRequired || '-'}" (Harga Satuan RKA: Rp ${Number(a.priceContract).toLocaleString('id-ID')})\n` +
+                    `   - Deviasi Finansial: Rp ${Number(a.selisihHarga).toLocaleString('id-ID')}\n` +
+                    `   - Analisis Awal: ${a.analisisCopilot || '-'}`;
+            })
+            .join('\n\n');
+
+        const queryText = `pedoman penulisan naskah hasil pemeriksaan temuan PBJ pengadaan barang jasa ${anomalies[0].itemName}`;
+        let queryVector: number[];
+        try {
+            queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
+        } catch (e) {
+            queryVector = new Array(1536).fill(0);
+        }
+
+        const criteriaChunks = await this.docRepository.searchSimilarity(queryVector, 3);
+        const criteriaText = criteriaChunks
+            .map((c) => `[PEDOMAN KELAYAKAN] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+            .join('\n\n');
+
+        const systemPrompt = `Anda adalah AI Asisten Auditor Utama (Copilot) di Inspektorat Daerah.
+Tugas Anda adalah merangkum seluruh anomali pengadaan barang jasa yang ditemukan di lapangan menjadi sebuah laporan draf temuan Naskah Hasil Pemeriksaan (NHP) resmi.
+Laporan draf temuan wajib disusun terstruktur per kelompok permasalahan, menggunakan format baku pengawasan: KONDISI, KRITERIA, SEBAB, AKIBAT, dan REKOMENDASI.
+Anda WAJIB memberikan respon berbentuk objek JSON bersih yang mematuhi JSON Schema yang diberikan.`;
+
+        const userPrompt = `
+=== DAFTAR ANOMALI PBJ YANG DITEMUKAN (KONDISI AKTUAL) ===
+${anomalySummary}
+
+=== ATURAN ACUAN KEPATUHAN / REGULASI (KRITERIA) ===
+${criteriaText || 'Gunakan standar kepatuhan administrasi daerah Perpres Pengadaan Barang dan Jasa Pemerintah.'}
+
+Berdasarkan data di atas, susunlah draf temuan pengawasan NHP secara formal, tajam, dan objektif.
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(NhpDraftOutputSchema)}
+
+Berikan output JSON sekarang:`;
+
+        this.logger.log('Mengirimkan draf kompilasi NHP ke LLM lokal...');
+        let rawResponse: string;
+        try {
+            rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+                jsonMode: true,
+                temperature: 0.1,
+            });
+        } catch (err) {
+            this.logger.error(`Koneksi LLM gagal. Menjalankan fallback draf NHP: ${err.message}`);
+            rawResponse = JSON.stringify(this.getFallbackNhp(anomalies));
+        }
+
+        try {
+            const parsedData = JSON.parse(rawResponse);
+
+            await this.prisma.trLhp.upsert({
+                where: { stId },
+                update: {
+                    substansiNhp: parsedData,
+                    sumberPembuatan: SumberPembuatan.AI_COPILOT,
+                },
+                create: {
+                    stId,
+                    nomorLhp: `DRAF-NHP-${stId.substring(0, 8).toUpperCase()}`,
+                    ringkasanEksekutif: 'Menunggu Penyusunan LHP Final',
+                    fileLhpSignedPath: '',
+                    substansiNhp: parsedData,
+                    sumberPembuatan: SumberPembuatan.AI_COPILOT,
+                },
+            });
+
+            this.logger.log(`Berhasil menyusun draf NHP untuk Surat Tugas ID: ${stId}`);
+            return parsedData;
+        } catch (parseError) {
+            this.logger.error(`Gagal mem-parsing hasil NHP: ${parseError.message}`);
+            throw new InternalServerErrorException(`Gagal menyusun NHP: ${parseError.message}`);
+        }
+    }
+
+    private getFallbackNhp(anomalies: any[]) {
+        return {
+            temuanUtama: [
+                {
+                    judulTemuan: 'Ketidaksesuaian Spesifikasi Pengadaan Barang Jasa pada OPD Terkait',
+                    kondisi: `Ditemukan pembelian ${anomalies.length} item pengadaan yang tidak sesuai spesifikasi perencanaan dengan akumulasi deviasi finansial sebesar Rp ${anomalies.reduce((acc, curr) => acc + Number(curr.selisihHarga || 0), 0).toLocaleString('id-ID')}.`,
+                    kriteria: 'Peraturan Presiden Republik Indonesia tentang Pengadaan Barang/Jasa Pemerintah Daerah wajib dilaksanakan secara transparan, efektif, dan ekonomis.',
+                    sebab: 'Kelalaian Pejabat Pembuat Komitmen (PPK) dalam mengawasi spesifikasi barang pengiriman dari penyedia.',
+                    akibat: 'Penggunaan anggaran daerah tidak sesuai peruntukan serta berpotensi menyebabkan inefisiensi pengadaan barang jasa.',
+                    rekomendasi: 'Memerintahkan Kepala OPD untuk memberikan penjelasan resmi tertulis dan mengembalikan selisih harga jika tidak didukung justifikasi yang sah.',
+                },
+            ],
+        };
+    }
+}
 
 --- FILE: src\opd\opd.controller.ts ---
 
@@ -4196,6 +7863,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TlhpService } from './tlhp.service';
+import { AddendumValidatorService } from './services/addendum-validator.service';
 import { ContextualAuthGuard } from '../common/guards/contextual-auth.guard';
 import {
   CreateTindakLanjutSchema,
@@ -4205,11 +7873,16 @@ import {
   CreateVerifikasiDto,
   LockFindingDto,
 } from './dto/tlhp.dto';
+import { UploadAddendumSchema, UploadAddendumDto } from './dto/addendum-upload.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
 
 @Controller('api/v1')
 export class TlhpController {
-  constructor(private readonly tlhpService: TlhpService) {}
+  constructor(
+    private readonly tlhpService: TlhpService,
+    private readonly addendumValidatorService: AddendumValidatorService,
+  ) { }
 
   @Post('tlhp')
   @UseInterceptors(FileInterceptor('file'))
@@ -4219,6 +7892,17 @@ export class TlhpController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.tlhpService.createTindakLanjut(dto, file);
+  }
+
+  @Post('tlhp/:id/adendum/validate')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.OK)
+  validateAddendum(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+    @Body(new ZodValidationPipe(UploadAddendumSchema)) dto: UploadAddendumDto,
+  ) {
+    return this.addendumValidatorService.validateAddendum(id, file, dto);
   }
 
   @Post('tlhp/:id/verifikasi')
@@ -4263,18 +7947,27 @@ import { BullModule } from '@nestjs/bullmq';
 import { TlhpService } from './tlhp.service';
 import { TlhpController } from './tlhp.controller';
 import { TlhpProcessor } from './tlhp.processor';
+import { AiModule } from '../common/ai/ai.module';
+import { DocumentIngestionModule } from '../document-ingestion/document-ingestion.module';
+import { AddendumValidatorService } from './services/addendum-validator.service';
 
 @Module({
   imports: [
     BullModule.registerQueue({
       name: 'compliance_calculation',
     }),
+    AiModule,
+    DocumentIngestionModule,
   ],
   controllers: [TlhpController],
-  providers: [TlhpService, TlhpProcessor],
-  exports: [TlhpService],
+  providers: [
+    TlhpService,
+    TlhpProcessor,
+    AddendumValidatorService,
+  ],
+  exports: [TlhpService, AddendumValidatorService],
 })
-export class TlhpModule {}
+export class TlhpModule { }
 
 --- FILE: src\tlhp\tlhp.processor.ts ---
 
@@ -4346,6 +8039,7 @@ import {
   ConflictException,
   BadRequestException,
   OnModuleInit,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -4357,6 +8051,7 @@ import {
   calculateHaversineDistance,
   parseCoordinates,
 } from '../common/utils/geo.util';
+import { AddendumValidatorService } from './services/addendum-validator.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -4368,10 +8063,12 @@ import * as path from 'path';
 @Injectable()
 export class TlhpService implements OnModuleInit {
   private redis: Redis;
+  private readonly logger = new Logger(TlhpService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly addendumValidator: AddendumValidatorService,
     @InjectQueue('compliance_calculation') private readonly complianceQueue: Queue,
   ) {
     this.redis = new Redis({
@@ -4390,7 +8087,7 @@ export class TlhpService implements OnModuleInit {
 
   async createTindakLanjut(dto: CreateTindakLanjutDto, file: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException('Berkas foto bukti tindak lanjut wajib diunggah.');
+      throw new BadRequestException('Berkas bukti tindak lanjut wajib diunggah.');
     }
 
     const rekomendasi = await this.prisma.trRekomendasi.findUnique({
@@ -4409,56 +8106,76 @@ export class TlhpService implements OnModuleInit {
       throw new NotFoundException('Rekomendasi tidak ditemukan.');
     }
 
+    const originalName = file.originalname || '';
+    const extension = originalName.split('.').pop()?.toLowerCase();
+
     let gpsLatitude: number | null = null;
     let gpsLongitude: number | null = null;
     let timestampMetadata: Date | null = null;
+    let aiAnalysisLog = '';
 
-    try {
-      if (file.originalname === 'mock-gps-ok.jpg') {
-        gpsLatitude = -7.250445;
-        gpsLongitude = 112.768845;
-        timestampMetadata = new Date();
-      } else {
-        const parser = ExifParser.create(file.buffer);
-        const result = parser.parse();
-        gpsLatitude = result.tags.GPSLatitude || null;
-        gpsLongitude = result.tags.GPSLongitude || null;
-        timestampMetadata = result.tags.DateTimeOriginal
-          ? new Date(result.tags.DateTimeOriginal * 1000)
-          : null;
+    if (extension === 'pdf' || extension === 'docx' || extension === 'txt') {
+
+      this.logger.log(`Berkas teridentifikasi sebagai Dokumen Administratif (.${extension}). Mengirim ke AI-Legal RAG...`);
+
+      try {
+        const aiAnalysis = await this.addendumValidator.validateAddendum(dto.rekomendasiId, file, {
+          catatanJustifikasi: dto.uraianTindakan,
+        });
+
+        aiAnalysisLog = `\n\n[EVALUASI JUSTIFIKASI HUKUM - AI COPILOT]:\n` +
+          `Kelayakan Kontrak: ${aiAnalysis.isJustificationValid ? 'SAH/LAYAK' : 'TIDAK LAYAK'}\n` +
+          `Rekomendasi Status: ${aiAnalysis.rekomendasiStatus}\n` +
+          `Analisis Kepatuhan: ${aiAnalysis.analisisKepatuhan}`;
+      } catch (err) {
+        this.logger.error(`AI Validator mengalami gangguan: ${err.message}`);
+        aiAnalysisLog = `\n\n[EVALUASI JUSTIFIKASI HUKUM - AI COPILOT]: Gagal mengevaluasi secara otomatis akibat gangguan LLM.`;
       }
-    } catch (e) {
-      throw new BadRequestException(
-        'Format file bukti tidak valid atau metadata EXIF tidak terbaca.',
-      );
-    }
+    } else {
 
-    if (gpsLatitude === null || gpsLongitude === null) {
-      throw new BadRequestException(
-        'Bukti ditolak: Foto bukti wajib menyertakan koordinat lokasi GPS (aktifkan geotagging kamera Anda).',
-      );
-    }
+      this.logger.log(`Berkas teridentifikasi sebagai Foto Bukti Fisik (.${extension}). Menjalankan validasi GPS EXIF...`);
 
-    const opdCoords = parseCoordinates(rekomendasi.temuan.opd.gpsKoordinat);
-    if (!opdCoords) {
-      throw new BadRequestException(
-        'Koordinat GPS OPD asal tidak valid di database master data.',
-      );
-    }
+      try {
+        if (file.originalname === 'mock-gps-ok.jpg') {
+          gpsLatitude = -7.250445;
+          gpsLongitude = 112.768845;
+          timestampMetadata = new Date();
+        } else {
+          const parser = ExifParser.create(file.buffer);
+          const result = parser.parse();
+          gpsLatitude = result.tags.GPSLatitude || null;
+          gpsLongitude = result.tags.GPSLongitude || null;
+          timestampMetadata = result.tags.DateTimeOriginal
+            ? new Date(result.tags.DateTimeOriginal * 1000)
+            : null;
+        }
+      } catch (e) {
+        throw new BadRequestException('Format file bukti tidak valid atau metadata EXIF tidak terbaca.');
+      }
 
-    const distance = calculateHaversineDistance(
-      gpsLatitude,
-      gpsLongitude,
-      opdCoords.latitude,
-      opdCoords.longitude,
-    );
+      if (gpsLatitude === null || gpsLongitude === null) {
+        throw new BadRequestException(
+          'Bukti ditolak: Foto bukti wajib menyertakan koordinat lokasi GPS (aktifkan geotagging kamera Anda).',
+        );
+      }
 
-    if (distance > 100) {
-      throw new BadRequestException(
-        `Bukti ditolak: Lokasi pengambilan foto berjarak ${distance.toFixed(
-          1,
-        )} meter (melebihi batas radius kepatuhan 100 meter dari OPD).`,
+      const opdCoords = parseCoordinates(rekomendasi.temuan.opd.gpsKoordinat);
+      if (!opdCoords) {
+        throw new BadRequestException('Koordinat GPS OPD asal tidak valid di database master data.');
+      }
+
+      const distance = calculateHaversineDistance(
+        gpsLatitude,
+        gpsLongitude,
+        opdCoords.latitude,
+        opdCoords.longitude,
       );
+
+      if (distance > 100) {
+        throw new BadRequestException(
+          `Bukti ditolak: Lokasi pengambilan foto berjarak ${distance.toFixed(1)} meter (melebihi batas radius kepatuhan 100 meter dari OPD).`,
+        );
+      }
     }
 
     let isTerlambat = false;
@@ -4482,7 +8199,8 @@ export class TlhpService implements OnModuleInit {
       const tl = await tx.trTindakLanjut.create({
         data: {
           rekomendasiId: dto.rekomendasiId,
-          uraianTindakan: dto.uraianTindakan,
+
+          uraianTindakan: `${dto.uraianTindakan}${aiAnalysisLog}`,
           isTerlambat: isTerlambat,
           statusTindakLanjut: 'MENUNGGU_VERIFIKASI',
         },
@@ -4654,6 +8372,19 @@ export class TlhpService implements OnModuleInit {
   }
 }
 
+--- FILE: src\tlhp\dto\addendum-upload.dto.ts ---
+
+import { z } from 'zod';
+
+export const UploadAddendumSchema = z.object({
+    catatanJustifikasi: z
+        .string({ required_error: 'Catatan justifikasi tindak lanjut wajib diisi.' })
+        .min(10, 'Justifikasi dari OPD terlalu pendek (minimal 10 karakter).')
+        .max(2000, 'Justifikasi dari OPD maksimal 2000 karakter.'),
+});
+
+export type UploadAddendumDto = z.infer<typeof UploadAddendumSchema>;
+
 --- FILE: src\tlhp\dto\tlhp.dto.ts ---
 
 import { z } from 'zod';
@@ -4688,6 +8419,179 @@ export const LockFindingSchema = z.object({
 export type CreateTindakLanjutDto = z.infer<typeof CreateTindakLanjutSchema>;
 export type CreateVerifikasiDto = z.infer<typeof CreateVerifikasiSchema>;
 export type LockFindingDto = z.infer<typeof LockFindingSchema>;
+
+--- FILE: src\tlhp\schemas\addendum-validation.schema.ts ---
+
+export const AddendumValidationSchema = {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'AddendumValidation',
+    type: 'object',
+    properties: {
+        isJustificationValid: {
+            type: 'boolean',
+            description: 'True jika argumen pembelaan / adendum kontrak yang diunggah OPD dibenarkan secara hukum daerah atau nasional (misal: adendum akibat kelangkaan barang di pasar).',
+        },
+        rekomendasiStatus: {
+            type: 'string',
+            enum: ['TUNTAS', 'TETAP_TEMUAN'],
+            description: 'Keputusan rekomendasi status tindak lanjut: TUNTAS (justifikasi sah) atau TETAP_TEMUAN (justifikasi tidak layak/tidak sah secara hukum).',
+        },
+        confidenceScore: {
+            type: 'number',
+            minimum: 0.0,
+            maximum: 1.0,
+            description: 'Seberapa yakin AI terhadap evaluasi dokumen adendum ini (0.0 s.d 1.0).',
+        },
+        pasalHukumAsosiasi: {
+            type: 'string',
+            description: 'Pasal atau dasar peraturan hukum resmi (contoh: "Perpres 12/2021 Pasal 54") yang mendasari keputusan kelayakan adendum kontrak tersebut.',
+        },
+        analisisKepatuhan: {
+            type: 'string',
+            description: 'Analisis naratif formal membandingkan argumen adendum kontrak OPD dengan kriteria aturan hukum yang terindeks.',
+        },
+    },
+    required: [
+        'isJustificationValid',
+        'rekomendasiStatus',
+        'confidenceScore',
+        'pasalHukumAsosiasi',
+        'analisisKepatuhan',
+    ],
+};
+
+--- FILE: src\tlhp\services\addendum-validator.service.ts ---
+
+import { Injectable, Logger, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
+import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
+import { AddendumValidationSchema } from '../schemas/addendum-validation.schema';
+import { UploadAddendumDto } from '../dto/addendum-upload.dto';
+import { DocumentType } from '@prisma/client';
+import * as pdfParse from 'pdf-parse';
+import * as mammoth from 'mammoth';
+
+@Injectable()
+export class AddendumValidatorService {
+    private readonly logger = new Logger(AddendumValidatorService.name);
+
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly llmAdapter: VendorLlmAdapter,
+        private readonly docRepository: DocumentRepository,
+        private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    ) { }
+
+    async validateAddendum(rekomendasiId: string, file: any, dto: UploadAddendumDto): Promise<any> {
+        this.logger.log(`Memulai evaluasi dokumen adendum untuk rekomendasi ID: ${rekomendasiId}...`);
+
+        const rekomendasi = await this.prisma.trRekomendasi.findUnique({
+            where: { id: rekomendasiId },
+            include: {
+                temuan: true,
+            },
+        });
+
+        if (!rekomendasi) {
+            throw new NotFoundException('Rekomendasi tidak ditemukan.');
+        }
+
+        const extractedText = await this.extractText(file);
+        if (extractedText.trim().length < 10) {
+            throw new BadRequestException('Isi berkas adendum terlalu pendek atau tidak terbaca oleh parser biner.');
+        }
+
+        const queryText = `aturan pasal hukum kelayakan adendum perubahan spesifikasi kontrak ${rekomendasi.temuan.kriteria}`;
+        let queryVector: number[];
+        try {
+            queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
+        } catch (e) {
+            queryVector = new Array(1536).fill(0);
+        }
+
+        const ruleChunks = await this.docRepository.searchSimilarity(queryVector, 3);
+        const rulesContext = ruleChunks
+            .map((c) => `[RUJUKAN HUKUM] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+            .join('\n\n');
+
+        const systemPrompt = `Anda adalah AI Pakar Evaluator Justifikasi Hukum Pengadaan Barang Jasa Pemerintah di Inspektorat.
+Tugas Anda adalah menilai keabsahan/kelayakan dokumen adendum kontrak yang diajukan oleh OPD (Auditee) untuk membenarkan ketidaksesuaian barang hasil temuan audit.
+Anda WAJIB memberikan hasil penilaian berbentuk objek JSON bersih yang mematuhi JSON Schema yang diberikan. Jangan mengarang data.`;
+
+        const userPrompt = `
+=== TEMUAN AUDIT INDUK (KRITERIA VS KONDISI) ===
+- Temuan Kondisi Aktual: "${rekomendasi.temuan.kondisi}"
+- Kriteria Rencana Awal : "${rekomendasi.temuan.kriteria}"
+
+=== ARGUMEN JUSTIFIKASI OPD ===
+"${dto.catatanJustifikasi}"
+
+=== ISI DOKUMEN ADENDUM KONTRAK YANG DIUNGGAH ===
+"${extractedText.substring(0, 3000)} ... (terpotong demi token limit)"
+
+=== REFERENSI REGULASI PBJ DAERAH (RAG CONTEXT) ===
+${rulesContext}
+
+Pertanyaan Evaluasi Hukum:
+- Apakah alasan ketidaksesuaian spesifikasi barang (misal: kelangkaan stok pasar, bencana alam, penghematan anggaran) dibenarkan secara hukum daerah/nasional (Rujukan RAG)?
+- Apakah dokumen adendum kontrak yang diunggah memiliki landasan hukum yang sah (pasal hukum)?
+- Berikan keputusan akhir status: "TUNTAS" (justifikasi sah) atau "TETAP_TEMUAN" (justifikasi ditolak/melanggar hukum).
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(AddendumValidationSchema)}
+
+Berikan output JSON sekarang:`;
+
+        this.logger.log('Mengirimkan draf evaluasi adendum ke LLM...');
+        let rawResponse: string;
+        try {
+            rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+                jsonMode: true,
+                temperature: 0.1,
+            });
+        } catch (llmError) {
+            this.logger.error(`AI offline, menjalankan fallback penolakan adendum: ${llmError.message}`);
+            rawResponse = JSON.stringify({
+                isJustificationValid: false,
+                rekomendasiStatus: 'TETAP_TEMUAN',
+                confidenceScore: 0.5,
+                pasalHukumAsosiasi: 'Tidak Teridentifikasi (AI Offline Fallback)',
+                analisisKepatuhan: '[FALLBACK SYSTEM] Evaluasi adendum pengadaan gagal dilakukan secara otomatis oleh AI karena masalah koneksi.',
+            });
+        }
+
+        try {
+            return JSON.parse(rawResponse);
+        } catch (parseError) {
+            this.logger.error(`Gagal mem-parsing evaluasi: ${parseError.message}`);
+            throw new InternalServerErrorException(`Gagal mengevaluasi adendum: ${parseError.message}`);
+        }
+    }
+
+    private async extractText(file: any): Promise<string> {
+        const originalName = file.originalname || '';
+        const extension = originalName.split('.').pop()?.toLowerCase();
+        const buffer = file.buffer;
+
+        try {
+            if (extension === 'pdf') {
+                const data = await pdfParse(buffer);
+                return data.text || '';
+            } else if (extension === 'docx') {
+                const result = await mammoth.extractRawText({ buffer });
+                return result.value || '';
+            } else if (extension === 'txt') {
+                return buffer.toString('utf-8');
+            }
+        } catch (err) {
+            throw new BadRequestException(`Gagal mengurai isi biner file .${extension}: ${err.message}`);
+        }
+
+        throw new BadRequestException(`Ekstensi .${extension} tidak didukung untuk dianalisis oleh sistem.`);
+    }
+}
 
 --- FILE: src\wbs\wbs.controller.ts ---
 

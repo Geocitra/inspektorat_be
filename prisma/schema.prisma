@@ -2,9 +2,6 @@
 // SOURCE OF TRUTH: Seluruh definisi tabel database ada di sini.
 // AI Agent: Selalu baca file ini sebelum menulis query Prisma.
 
-// CATATAN FASE 5: Ekstensi pgvector akan ditambahkan kembali pada Fase 5 (AI/RAG).
-// pgvector memerlukan kompilasi manual di Windows menggunakan Visual Studio C++ Build Tools.
-// Panduan: lihat roadmap be fase 1.txt bagian "PostgreSQL & pgvector"
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -73,6 +70,7 @@ model MstOpd {
   agendaAudits     TrAgendaAudit[]
   temuan           TrTemuan[]
   tiketKonsultasis TrTiketKonsultasi[]
+  riskAssessments  OpdRiskAssessment[]
 
   @@map("mst_opd")
 }
@@ -153,6 +151,9 @@ model TrPkpt {
   approvedByInspekturId String?       @map("approved_by_inspektur_id") @db.Uuid
   approvedAt            DateTime?     @map("approved_at") @db.Timestamptz
 
+  sumberPembuatan       SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan")
+  substansiDokumen      Json?           @map("substansi_dokumen")
+
   // Relations
   approvedBy   MstPegawai?     @relation(fields: [approvedByInspekturId], references: [id], onDelete: Restrict)
   agendaAudits TrAgendaAudit[]
@@ -168,6 +169,9 @@ model TrAgendaAudit {
   perkiraanBulan  Int           @map("perkiraan_bulan") @db.Integer // 1 - 12
   estimasiAnggaran Decimal      @default(0.00) @map("estimasi_anggaran") @db.Decimal(15, 2)
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  sumberPembuatan  SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan")
+  substansiDokumen Json?           @map("substansi_dokumen")
 
   // Relations
   pkpt       TrPkpt        @relation(fields: [pkptId], references: [id], onDelete: Cascade)
@@ -191,6 +195,8 @@ model TrSuratTugas {
   agendaAudit                TrAgendaAudit?               @relation(fields: [agendaAuditId], references: [id], onDelete: SetNull)
   stAuditors                 RelStAuditor[]
   kkas                       TrKka[]
+  pkas                       TrPka[]
+  documents                  AuditDocument[]
   lhp                        TrLhp?
   rekomendasiPenugasanKhusus TrRekomendasiPenugasanKhusus? @relation(fields: [rekomendasiPenugasanKhususId], references: [id], onDelete: SetNull)
 
@@ -215,6 +221,7 @@ model RelStAuditor {
 model TrKka {
   id                  String           @id @default(uuid()) @db.Uuid
   stId                String           @map("st_id") @db.Uuid
+  pkaId               String?          @map("pka_id") @db.Uuid // Kolom Baru: Hubungan ke PKA
   prosedurPemeriksaan String           @map("prosedur_pemeriksaan") @db.Text
   uraianPengujian     String           @map("uraian_pengujian") @db.Text
   kesimpulanSementara String           @map("kesimpulan_sementara") @db.Text
@@ -224,8 +231,10 @@ model TrKka {
 
   // Relations
   suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Restrict)
+  pka        TrPka?       @relation(fields: [pkaId], references: [id], onDelete: SetNull)
   lhp        TrLhp?       @relation(fields: [lhpId], references: [id], onDelete: SetNull)
   temuan     TrTemuan[]
+  itemAudits TrItemAuditPBJ[]
 
   @@map("tr_kka")
 }
@@ -237,6 +246,9 @@ model TrLhp {
   ringkasanEksekutif String       @map("ringkasan_eksekutif") @db.Text
   fileLhpSignedPath  String       @map("file_lhp_signed_path") @db.VarChar(255)
   signedAt           DateTime?    @map("signed_at") @db.Timestamptz
+
+  substansiNhp       Json?        @map("substansi_nhp") // Menyimpan draf temuan NHP struktural (Fase 5)
+  sumberPembuatan    SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan") // Melacak kepatuhan proses (Fase 5)
 
   // Relations
   suratTugas TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Restrict)
@@ -296,7 +308,7 @@ enum HasilVerifikasi {
 }
 
 // ============================================================
-// MODEL TRANSAKSI BARU KLASTER C
+// MODEL TRANSAKSI KLASTER C (Kombinasi Relasi Cascade Aman)
 // ============================================================
 
 model TrTindakLanjut {
@@ -307,8 +319,8 @@ model TrTindakLanjut {
   statusTindakLanjut StatusTindakLanjut @default(MENUNGGU_VERIFIKASI) @map("status_tindak_lanjut")
   tanggalUnggah      DateTime           @default(now()) @map("tanggal_unggah") @db.Timestamptz
 
-  // Relations
-  rekomendasi         TrRekomendasi               @relation(fields: [rekomendasiId], references: [id], onDelete: Restrict)
+  // Relations (Safe Cascade Deletion)
+  rekomendasi         TrRekomendasi               @relation(fields: [rekomendasiId], references: [id], onDelete: Cascade)
   buktiTindakLanjuts  TrBuktiTindakLanjut[]
   verifikasi          TrVerifikasiTindakLanjut?
 
@@ -323,7 +335,7 @@ model TrBuktiTindakLanjut {
   gpsLongitude      Float?          @map("gps_longitude")
   timestampMetadata DateTime?       @map("timestamp_metadata") @db.Timestamptz
 
-  // Relations
+  // Relations (Safe Cascade Deletion)
   tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Cascade)
 
   @@map("tr_bukti_tindak_lanjut")
@@ -337,8 +349,8 @@ model TrVerifikasiTindakLanjut {
   hasilVerifikasi    HasilVerifikasi @map("hasil_verifikasi")
   tanggalVerifikasi  DateTime        @default(now()) @map("tanggal_verifikasi") @db.Timestamptz
 
-  // Relations
-  tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Restrict)
+  // Relations (Safe Cascade Deletion)
+  tindakLanjut      TrTindakLanjut  @relation(fields: [tindakLanjutId], references: [id], onDelete: Cascade)
   verifikator       MstPegawai      @relation(fields: [verifikatorId], references: [id], onDelete: Restrict)
 
   @@map("tr_verifikasi_tindak_lanjut")
@@ -544,4 +556,137 @@ model TrKmsArtikel {
   regulasi             MstRegulasi?      @relation(fields: [referensiRegulasiId], references: [id], onDelete: SetNull)
 
   @@map("tr_kms_artikel")
+}
+
+// ============================================================
+// MODEL UNTUK FASE 1 & FASE 4: RAG KNOWLEDGE BASE & PBJ ANOMALY
+// ============================================================
+
+enum DocumentType {
+  REGULASI_INTERNAL
+  REGULASI_DAERAH
+  TEMPLATES
+  LAINNYA
+  RKA_PERENCANAAN
+  ADENDUM_JUSTIFIKASI
+}
+
+enum DocumentStatus {
+  DRAF
+  AKTIF
+  ARSIP
+}
+
+model AuditDocument {
+  id        String         @id @default(uuid()) @db.Uuid
+  title     String         @db.VarChar(255)
+  type      DocumentType
+  status    DocumentStatus @default(DRAF)
+  filePath  String         @map("file_path") @db.VarChar(255)
+  stId      String?        @map("st_id") @db.Uuid
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  metadata   DocMetadata?
+  chunks     DocChunk[]
+  itemAudits TrItemAuditPBJ[]
+  suratTugas TrSuratTugas?   @relation(fields: [stId], references: [id], onDelete: SetNull)
+
+  @@map("audit_documents")
+}
+
+model DocMetadata {
+  id          String        @id @default(uuid()) @db.Uuid
+  documentId  String        @unique @map("document_id") @db.Uuid
+  fileSize    Int           @map("file_size")
+  mimeType    String        @map("mime_type") @db.VarChar(100)
+  totalChunks Int           @map("total_chunks")
+  totalTokens Int?          @map("total_tokens")
+  hash        String        @db.VarChar(64)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  document AuditDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("doc_metadata")
+}
+
+model DocChunk {
+  id         String        @id @default(uuid()) @db.Uuid
+  documentId String        @map("document_id") @db.Uuid
+  chunkIndex Int           @map("chunk_index")
+  content    String        @db.Text
+  embedding  Float[]       @map("embedding")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  document AuditDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("doc_chunks")
+}
+
+model TrItemAuditPBJ {
+  id              String   @id @default(uuid()) @db.Uuid
+  kkaId           String   @map("kka_id") @db.Uuid
+  documentId      String?  @map("document_id") @db.Uuid // Kolom Baru: Relasi opsional ke sumber dokumen SPJ
+  itemName        String   @map("item_name") @db.VarChar(255)
+  specRequired    String?  @map("spec_required") @db.Text
+  specActual      String?  @map("spec_actual") @db.Text
+  priceContract   Decimal? @map("price_contract") @db.Decimal(15, 2)
+  priceActual     Decimal? @map("price_actual") @db.Decimal(15, 2)
+  volumeContract  Decimal? @map("volume_contract") @db.Decimal(15, 2)
+  volumeActual    Decimal? @map("volume_actual") @db.Decimal(15, 2)
+  selisihHarga    Decimal? @map("selisih_harga") @db.Decimal(15, 2)
+  analisisCopilot String?  @map("analisis_copilot") @db.Text
+  status          String   @db.VarChar(50)
+  sumberPembuatan SumberPembuatan @default(SYSTEM) @map("sumber_pembuatan")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  kka             TrKka          @relation(fields: [kkaId], references: [id], onDelete: Cascade)
+  document        AuditDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@map("tr_item_audit_pbj")
+}
+
+// ============================================================
+// MODEL UNTUK FASE 2: OPDRISKASSESSMENT & ENUM SUMBERPEMBUATAN
+// ============================================================
+
+enum SumberPembuatan {
+  SYSTEM
+  AI_COPILOT
+}
+
+model OpdRiskAssessment {
+  id        String   @id @default(uuid()) @db.Uuid
+  opdId     String   @map("opd_id") @db.Uuid
+  tahun     Int      @map("tahun")
+  nri       Decimal  @map("nri") @db.Decimal(5, 2)
+  nfr       Decimal  @map("nfr") @db.Decimal(5, 2)
+  ntr       Decimal  @map("ntr") @db.Decimal(5, 2)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  opd       MstOpd   @relation(fields: [opdId], references: [id], onDelete: Restrict)
+
+  @@unique([opdId, tahun])
+  @@map("opd_risk_assessments")
+}
+
+model TrPka {
+  id               String       @id @default(uuid()) @db.Uuid
+  stId             String       @map("st_id") @db.Uuid
+  noLangkah        String       @map("no_langkah") @db.VarChar(50) // Contoh: "A.1", "B.2"
+  prosedur         String       @map("prosedur") @db.Text         // Prosedur Pemeriksaan AI
+  pelaksanaRencana String?      @map("pelaksana_rencana") @db.VarChar(100) // Rencana Pelaksana (misal: "AT-1" atau "KT")
+  waktuRencana     Int?         @map("waktu_rencana") // Estimasi Jam Kerja Pengawasan (HP)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  suratTugas       TrSuratTugas @relation(fields: [stId], references: [id], onDelete: Cascade)
+  kkas             TrKka[]      // Relasi ke KKA
+
+  @@map("tr_pka")
 }

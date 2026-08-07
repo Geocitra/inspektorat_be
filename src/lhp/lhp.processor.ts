@@ -17,11 +17,18 @@ export class LhpProcessor extends WorkerHost {
       `[QUEUED JOB] Memulai penyusunan dokumen LHP untuk ST ID: ${stId}, Nomor LHP: ${nomorLhp}`,
     );
 
-    // 1. Ambil seluruh KKA berstatus APPROVED
+    // 1. Ambil seluruh KKA berstatus APPROVED beserta rincian anomali barang pengadaan PBJ hasil evaluasi AI (Fase 4)
     const kkas = await this.prisma.trKka.findMany({
       where: {
         stId: stId,
         statusKka: 'APPROVED',
+      },
+      include: {
+        itemAudits: {
+          where: {
+            status: 'ANOMALI',
+          },
+        },
       },
     });
 
@@ -48,13 +55,29 @@ export class LhpProcessor extends WorkerHost {
     docContent += `RINGKASAN EKSEKUTIF:\n`;
     docContent += `${ringkasanEksekutif}\n\n`;
     docContent += `--------------------------------------------------------\n`;
-    docContent += `KERTAS KERJA AUDIT GABUNGAN (APPROVED):\n`;
+    docContent += `KERTAS KERJA AUDIT GABUNGAN & ANOMALI PBJ (APPROVED):\n`;
 
     kkas.forEach((kka, index) => {
       docContent += `\nKKA #${index + 1} (ID: ${kka.id})\n`;
       docContent += `- Prosedur  : ${kka.prosedurPemeriksaan}\n`;
       docContent += `- Pengujian : ${kka.uraianPengujian}\n`;
       docContent += `- Kesimpulan: ${kka.kesimpulanSementara}\n`;
+
+      // Jika ada anomali barang pengadaan hasil analisis semantik AI (Fase 4), rajut ke dalam dokumen fisik
+      if (kka.itemAudits && kka.itemAudits.length > 0) {
+        docContent += `\n  [TERDETEKSI ANOMALI PENGADAAN PBJ - AI COPILOT]:\n`;
+        kka.itemAudits.forEach((item, itemIdx) => {
+          docContent += `  ${itemIdx + 1}. Nama Barang Realisasi : ${item.itemName}\n`;
+          docContent += `     - Spesifikasi Direncanakan : ${item.specRequired || '-'}\n`;
+          docContent += `     - Spesifikasi Fisik Nyata  : ${item.specActual || '-'}\n`;
+          docContent += `     - Harga Satuan Rencana     : Rp ${Number(item.priceContract || 0).toLocaleString('id-ID')}\n`;
+          docContent += `     - Harga Satuan Realisasi   : Rp ${Number(item.priceActual || 0).toLocaleString('id-ID')}\n`;
+          docContent += `     - Volume Rencana           : ${Number(item.volumeContract || 0)}\n`;
+          docContent += `     - Volume Realisasi         : ${Number(item.volumeActual || 0)}\n`;
+          docContent += `     - Deviasi Harga Total      : Rp ${Number(item.selisihHarga || 0).toLocaleString('id-ID')}\n`;
+          docContent += `     - Analisis Temuan AI       : ${item.analisisCopilot || '-'}\n`;
+        });
+      }
       docContent += `--------------------------------------------------------\n`;
     });
 
