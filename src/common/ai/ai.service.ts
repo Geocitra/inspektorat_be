@@ -1,41 +1,39 @@
 // src/common/ai/ai.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import OpenAI from 'openai';
 
 @Injectable()
 export class AiService {
-  private readonly ollamaUrl: string;
+  private readonly openai: OpenAI;
+  private readonly openaiModel: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.ollamaUrl = this.configService.get<string>(
-      'OLLAMA_URL',
-      'http://localhost:11434',
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    this.openai = new OpenAI({ apiKey });
+    this.openaiModel = this.configService.get<string>(
+      'OPENAI_MODEL',
+      'gpt-5.4-mini',
     );
   }
 
   /**
-   * Menghasilkan embeddings 1536-dimensi menggunakan model nomic-embed-text dari Ollama.
-   * Dilengkapi fallback semi-deterministik jika server Ollama lokal tidak aktif.
+   * Menghasilkan embeddings 1536-dimensi menggunakan model text-embedding-3-small dari OpenAI.
+   * Dilengkapi fallback semi-deterministik jika API OpenAI tidak aktif.
    */
   async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await fetch(`${this.ollamaUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'nomic-embed-text', // Dimensi standar 1536
-          prompt: text.replace(/\n/g, ' '),
-        }),
+      const response = await this.openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: text.replace(/\n/g, ' '),
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.embedding && result.embedding.length === 1536) {
-          return result.embedding;
-        }
+      const embedding = response.data[0]?.embedding;
+      if (embedding && embedding.length === 1536) {
+        return embedding;
       }
     } catch (err) {
-      // Server Ollama offline/tidak terjangkau, masuk ke blok fallback di bawah
+      // Masuk ke blok fallback jika API bermasalah
     }
 
     // FALLBACK SEMI-DETERMINISTIK (Agar E2E & Kueri Cosine Similarity tetap berjalan sukses di Windows dev environment)
@@ -47,7 +45,6 @@ export class AiService {
     }
 
     for (let i = 0; i < 1536; i++) {
-      // Gunakan rumus matematika Math.sin untuk melahirkan angka pseudorandom desimal yang deterministik
       embedding[i] = Math.sin(hash + i) * 0.1;
     }
 
@@ -55,32 +52,24 @@ export class AiService {
   }
 
   /**
-   * Mengirim system prompt dan user prompt ke Local LLM untuk melahirkan respon RAG.
-   * Dilengkapi fallback jika server Ollama offline.
+   * Mengirim system prompt dan user prompt ke OpenAI untuk melahirkan respon RAG.
+   * Dilengkapi fallback jika API offline.
    */
   async generateChatCompletion(
     systemPrompt: string,
     userPrompt: string,
   ): Promise<string> {
     try {
-      const response = await fetch(`${this.ollamaUrl}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'llama3', // Bisa disesuaikan dengan model lokal terinstal
-          system: systemPrompt,
-          prompt: userPrompt,
-          stream: false,
-          options: {
-            temperature: 0, // Mengurangi halusinasi AI
-          },
-        }),
+      const response = await this.openai.chat.completions.create({
+        model: this.openaiModel,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0,
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        return result.response;
-      }
+      return response.choices[0]?.message?.content || '';
     } catch (err) {
       // Fallback
     }

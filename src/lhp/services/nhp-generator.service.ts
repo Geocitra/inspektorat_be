@@ -61,8 +61,8 @@ export class NhpGeneratorService {
             })
             .join('\n\n');
 
-        // 3. Ambil Regulasi Terkait (Kriteria) via Semantik RAG dari Global Vector Store
-        const queryText = `pedoman penulisan naskah hasil pemeriksaan temuan PBJ pengadaan barang jasa ${anomalies[0].itemName}`;
+        // 3. Ambil Regulasi Terkait (Kriteria) & Contoh Template via Semantik RAG
+        const queryText = `contoh dokumen NHP LHP template laporan pengawasan pedoman penulisan naskah hasil pemeriksaan temuan PBJ pengadaan barang jasa ${anomalies[0].itemName}`;
         let queryVector: number[];
         try {
             queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
@@ -72,23 +72,24 @@ export class NhpGeneratorService {
 
         const criteriaChunks = await this.docRepository.searchSimilarity(queryVector, 3);
         const criteriaText = criteriaChunks
-            .map((c) => `[PEDOMAN KELAYAKAN] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+            .map((c) => `[ACUAN REGULASI & TEMPLATE REFERENSI] Sumber: ${c.document.title}\nKonten: ${c.content}`)
             .join('\n\n');
 
         // 4. Bangun Prompt BPK/APIP Standard
         const systemPrompt = `Anda adalah AI Asisten Auditor Utama (Copilot) di Inspektorat Daerah.
 Tugas Anda adalah merangkum seluruh anomali pengadaan barang jasa yang ditemukan di lapangan menjadi sebuah laporan draf temuan Naskah Hasil Pemeriksaan (NHP) resmi.
 Laporan draf temuan wajib disusun terstruktur per kelompok permasalahan, menggunakan format baku pengawasan: KONDISI, KRITERIA, SEBAB, AKIBAT, dan REKOMENDASI.
+Anda WAJIB meniru gaya bahasa formal birokrasi, struktur kalimat tajam, dan format paragraf dari TEMPLATE REFERENSI yang diberikan.
 Anda WAJIB memberikan respon berbentuk objek JSON bersih yang mematuhi JSON Schema yang diberikan.`;
 
         const userPrompt = `
 === DAFTAR ANOMALI PBJ YANG DITEMUKAN (KONDISI AKTUAL) ===
 ${anomalySummary}
 
-=== ATURAN ACUAN KEPATUHAN / REGULASI (KRITERIA) ===
+=== ACUAN REGULASI KEPATUHAN & CONTOH TEMPLATE REFERENSI MASA LALU (RAG) ===
 ${criteriaText || 'Gunakan standar kepatuhan administrasi daerah Perpres Pengadaan Barang dan Jasa Pemerintah.'}
 
-Berdasarkan data di atas, susunlah draf temuan pengawasan NHP secara formal, tajam, dan objektif.
+Berdasarkan data kondisi aktual dan contoh template referensi masa lalu di atas, susunlah draf temuan pengawasan NHP secara formal, tajam, objektif, dan dengan tata bahasa birokrasi pengawasan yang sesuai dengan contoh referensi.
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(NhpDraftOutputSchema)}

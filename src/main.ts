@@ -22,7 +22,13 @@ async function bootstrap() {
   app.enableCors({
     origin: ['http://localhost:3001', 'http://localhost:5173'], // Port FE dev server
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-mock-role',
+      'x-mock-user-id',
+      'x-mock-pegawai-id',
+    ],
   });
 
   // 3. Jalankan aplikasi di port dari konfigurasi .env

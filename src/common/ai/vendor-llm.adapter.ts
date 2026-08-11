@@ -2,26 +2,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { jsonrepair } from 'jsonrepair';
+import OpenAI from 'openai';
 
 @Injectable()
 export class VendorLlmAdapter {
   private readonly logger = new Logger(VendorLlmAdapter.name);
-  private readonly ollamaUrl: string;
+  private readonly openai: OpenAI;
   private readonly defaultModel: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.ollamaUrl = this.configService.get<string>(
-      'OLLAMA_URL',
-      'http://localhost:11434',
-    );
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    this.openai = new OpenAI({ apiKey });
     this.defaultModel = this.configService.get<string>(
-      'OLLAMA_CHAT_MODEL',
-      'llama3',
+      'OPENAI_MODEL',
+      'gpt-5.4-mini',
     );
   }
 
   /**
-   * Mengirim permintaan Chat Completion ke Local LLM dengan validasi & pemulihan JSON
+   * Mengirim permintaan Chat Completion ke OpenAI dengan validasi & pemulihan JSON
    */
   async callLlm(
     systemPrompt: string,
@@ -29,36 +28,25 @@ export class VendorLlmAdapter {
     options?: { model?: string; temperature?: number; jsonMode?: boolean },
   ): Promise<string> {
     const model = options?.model || this.defaultModel;
-    const temperature = options?.temperature ?? 0; // Default 0 untuk mencegah halusinasi
+    const temperature = options?.temperature ?? 0;
     const jsonMode = options?.jsonMode ?? false;
 
     try {
-      const requestBody: any = {
+      const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
         model,
-        system: systemPrompt,
-        prompt: userPrompt,
-        stream: false,
-        options: {
-          temperature,
-        },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature,
       };
 
       if (jsonMode) {
-        requestBody.format = 'json';
+        params.response_format = { type: 'json_object' };
       }
 
-      const response = await fetch(`${this.ollamaUrl}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP Error! Status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      let outputText = result.response || '';
+      const response = await this.openai.chat.completions.create(params);
+      let outputText = response.choices[0]?.message?.content || '';
 
       if (jsonMode) {
         outputText = this.healJson(outputText);
@@ -66,7 +54,7 @@ export class VendorLlmAdapter {
 
       return outputText;
     } catch (error) {
-      this.logger.error(`Gagal menghubungi server LLM Lokal (${this.ollamaUrl}): ${error.message}`);
+      this.logger.error(`Gagal menghubungi OpenAI: ${error.message}`);
       throw error;
     }
   }

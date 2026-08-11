@@ -1,4 +1,3 @@
-// src/assignment/assignment.controller.ts
 import {
   Controller,
   Get,
@@ -8,6 +7,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  Delete,
 } from '@nestjs/common';
 import { AssignmentService } from './assignment.service';
 import { TeamAllocationService } from './services/team-allocation.service';
@@ -71,6 +71,16 @@ export class AssignmentController {
   @Get(':id')
   findOneSt(@Param('id', ParseUUIDPipe) id: string) {
     return this.assignmentService.findOneSt(id);
+  }
+
+  /**
+   * DELETE /api/v1/surat-tugas/:id
+   * Menghapus draf Surat Tugas.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  deleteSt(@Param('id', ParseUUIDPipe) id: string) {
+    return this.assignmentService.deleteSt(id);
   }
 
   /**

@@ -255,4 +255,13 @@ export class AssignmentService {
       },
     });
   }
+
+  /**
+   * Menghapus draf Surat Tugas.
+   */
+  async deleteSt(id: string) {
+    return this.prisma.trSuratTugas.delete({
+      where: { id },
+    });
+  }
 }

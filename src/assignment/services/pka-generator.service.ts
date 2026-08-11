@@ -42,8 +42,8 @@ export class PkaGeneratorService {
     const opdName = st.agendaAudit?.opd?.namaOpd || 'Umum';
 
     // 2. Ambil konteks RAG
-    // Pencarian regulasi acuan PKA di Global Vector Store menggunakan koordinat vektor riil
-    const queryText = `SOP Program Kerja Audit PKA ${fokusPengawasan || ''}`;
+    // Pencarian regulasi acuan PKA & Contoh Template LHP di Global Vector Store
+    const queryText = `contoh dokumen PKA SOP Program Kerja Audit langkah kerja pengujian ${fokusPengawasan || ''} template LHP NHP`;
     let queryVector: number[];
     try {
       queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
@@ -59,18 +59,19 @@ export class PkaGeneratorService {
     let criteriaText = '';
     if (criteriaChunks && criteriaChunks.length > 0) {
       criteriaText = criteriaChunks
-        .map((c) => `[GUIDELINE] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .map((c) => `[TEMPLATE & GUIDELINE REFERENSI] Sumber: ${c.document.title}\nKonten: ${c.content}`)
         .join('\n\n');
     } else {
       const fallbackChunks = await this.docRepository.searchKeyword('PKA', 3);
       criteriaText = fallbackChunks
-        .map((c) => `[GUIDELINE] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .map((c) => `[TEMPLATE & GUIDELINE REFERENSI] Sumber: ${c.document.title}\nKonten: ${c.content}`)
         .join('\n\n');
     }
 
     // 3. Susun Prompt Composite RAG
     const systemPrompt = `Anda adalah AI Asisten Auditor (Copilot) untuk Inspektorat.
 Tugas Anda adalah menyusun Program Kerja Audit (PKA) yang berisi langkah-langkah kerja pengujian substantif dan kepatuhan.
+Anda WAJIB meniru tingkat kedalaman teknis prosedur, gaya bahasa formal pengawasan, dan format penulisan dari TEMPLATE REFERENSI yang diberikan.
 Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
 
     const userPrompt = `Surat Tugas Nomor: ${st.nomorSt}
@@ -78,10 +79,10 @@ OPD Sasaran: ${opdName}
 Fokus Pengawasan: ${fokusPengawasan || 'Pengujian umum administratif dan kepatuhan'}
 Periode Audit: ${st.tanggalMulai.toISOString()} s.d ${st.tanggalSelesai.toISOString()}
 
-Berikut adalah Panduan Penyusunan Langkah Kerja (PKA):
+Berikut adalah Panduan Penyusunan & Contoh Dokumen PKA Referensi Masa Lalu (RAG):
 ${criteriaText}
 
-Berdasarkan data di atas, susunlah draf langkah kerja PKA (noLangkah, prosedur, pelaksanaRencana, waktuRencana dalam jam kerja HP).
+Berdasarkan data kondisi aktual dan contoh template referensi masa lalu di atas, susunlah draf langkah kerja PKA (noLangkah, prosedur, pelaksanaRencana, waktuRencana dalam jam kerja HP) dengan tata bahasa pengawasan yang tajam dan formal.
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(PkaDraftOutputSchema)}
