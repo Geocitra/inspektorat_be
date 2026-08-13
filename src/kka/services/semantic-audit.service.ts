@@ -67,7 +67,7 @@ export class SemanticAuditService {
         stId: string,
         kkaId: string,
         spjItem: NormalizedPbjRow,
-        documentId: string,
+        documentId?: string,
     ): Promise<any> {
         this.logger.log(`[Semantic PBJ Audit] Menganalisis baris SPJ ke-${spjItem.rowNumber}: "${spjItem.itemName}"`);
 
@@ -184,7 +184,7 @@ Berikan output JSON sekarang:`;
             return await this.prisma.trItemAuditPBJ.create({
                 data: {
                     kkaId,
-                    documentId,
+                    documentId: documentId || null,
                     itemName: spjItem.itemName,
                     specRequired: aiResult.specRequired || null,
                     specActual: spjItem.itemName,

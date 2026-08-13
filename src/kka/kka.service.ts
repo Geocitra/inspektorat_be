@@ -14,7 +14,8 @@ import { StatusKka, SumberPembuatan, DocumentType } from '@prisma/client';
 import { VendorLlmAdapter } from '../common/ai/vendor-llm.adapter';
 import { DocumentRepository } from '../document-ingestion/repositories/document.repository';
 import { ExternalEmbeddingAdapter } from '../document-ingestion/providers/external-embedding.adapter';
-import * as ExcelJS from 'exceljs';
+import { PbjParserService } from './services/pbj-parser.service';
+import { SemanticAuditService } from './services/semantic-audit.service';
 
 @Injectable()
 export class KkaService {
@@ -25,6 +26,8 @@ export class KkaService {
     private readonly llmAdapter: VendorLlmAdapter,
     private readonly docRepository: DocumentRepository,
     private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    private readonly parserService: PbjParserService,
+    private readonly semanticAuditService: SemanticAuditService,
   ) { }
 
   /**
@@ -76,30 +79,13 @@ export class KkaService {
     }
 
     this.logger.log(`Memulai ekstraksi berkas Excel SPJ untuk KKA ID: ${id}`);
-    const workbook = new ExcelJS.Workbook();
-    try {
-      await workbook.xlsx.load(file.buffer);
-    } catch (err) {
-      throw new BadRequestException('Berkas Excel rusak atau tidak dapat dibaca oleh parser.');
-    }
-
-    const worksheet = workbook.getWorksheet(dto.spjSheetName) || workbook.worksheets[0];
-    if (!worksheet) {
-      throw new BadRequestException(`Sheet bernama "${dto.spjSheetName}" tidak ditemukan di berkas Excel.`);
-    }
-
-    const spjRows: { itemName: string; volume: number; price: number }[] = [];
-    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber < dto.rowStart) return;
-
-      const itemName = row.getCell(1).text?.trim();
-      const volume = parseInt(row.getCell(2).text, 10) || 0;
-      const price = parseFloat(row.getCell(3).text) || 0;
-
-      if (itemName) {
-        spjRows.push({ itemName, volume, price });
-      }
-    });
+    
+    // 1. Ekstrak dan normalisasi baris Excel menggunakan parserService
+    const spjRows = await this.parserService.parseAndNormalize(
+      file.buffer,
+      dto.spjSheetName,
+      dto.rowStart,
+    );
 
     this.logger.log(`Berhasil mengekstrak ${spjRows.length} baris data kuitansi realisasi.`);
 
@@ -110,118 +96,13 @@ export class KkaService {
 
     const auditResults = [];
 
+    // 2. Evaluasi setiap baris menggunakan semanticAuditService
     for (const spjItem of spjRows) {
-      // 1. Dapatkan embedding dari barang yang dibeli (Kondisi)
-      let queryVector: number[];
-      try {
-        queryVector = await this.embeddingAdapter.generateEmbedding(`Rincian barang kuitansi: ${spjItem.itemName}`);
-      } catch (e) {
-        queryVector = new Array(1536).fill(0);
-      }
-
-      // 2. Lakukan RAG khusus (Scoped RAG) ke RKA perencanaan OPD yang terikat Surat Tugas ini
-      const rkaChunks = await this.prisma.docChunk.findMany({
-        where: {
-          document: {
-            stId: kka.stId,
-            type: DocumentType.RKA_PERENCANAAN,
-          },
-        },
-      });
-
-      // Cari rencana yang paling mirip secara semantik di dalam baris perencanaan RKA
-      let closestRkaContext = 'Tidak ditemukan dokumen RKA Rencana Anggaran resmi di database.';
-      if (rkaChunks.length > 0) {
-        // Melakukan cosine similarity pencocokan di memori untuk menemukan kriteria RKA yang terdekat
-        const matched = rkaChunks
-          .map((chunk) => {
-            let dotProduct = 0;
-            let normA = 0;
-            let normB = 0;
-            for (let i = 0; i < queryVector.length; i++) {
-              dotProduct += queryVector[i] * chunk.embedding[i];
-              normA += queryVector[i] * queryVector[i];
-              normB += chunk.embedding[i] * chunk.embedding[i];
-            }
-            const similarity = normA === 0 || normB === 0 ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-            return { chunk, similarity };
-          })
-          .sort((a, b) => b.similarity - a.similarity)[0];
-
-        if (matched && matched.similarity > 0.3) {
-          closestRkaContext = `Rencana Anggaran yang Direferensikan:\n${matched.chunk.content}`;
-        }
-      }
-
-      // 3. Bangun Komparasi Semantik & Deterministik via AI Copilot
-      const systemPrompt = `Anda adalah Asisten AI Auditor PBJ di Inspektorat Daerah.
-Tugas Anda adalah mendeteksi ketidaksesuaian atau anomali pengadaan barang (mismatch spesifikasi/merk/warna) berdasarkan data perbandingan yang disuplai.
-Anda WAJIB memberikan respon dalam format JSON murni mengikuti struktur objek berikut:
-{
-  "isMismatch": boolean,
-  "similarityScore": number, // Skor kemiripan nama barang (0.0 s.d 1.0)
-  "specRequired": "nama barang rencana",
-  "priceContract": number, // harga satuan rencana
-  "volumeContract": number, // volume rencana
-  "analisisCopilot": "analisis rinci mengapa barang ini menyimpang (kondisi vs kriteria)"
-}`;
-
-      const userPrompt = `
-=== BARANG REALISASI (SPJ) ===
-- Nama Barang: "${spjItem.itemName}"
-- Volume: ${spjItem.volume}
-- Harga Satuan: Rp ${spjItem.price.toLocaleString('id-ID')}
-
-=== KONTEKS PERENCANAAN (RKA) ===
-${closestRkaContext}
-
-Evaluasi secara objektif:
-- Apakah ada perbedaan warna, merk, ukuran atau spesifikasi lainnya?
-- Apakah harga realisasi melebihi harga rencana anggaran?
-- Berikan analisis tertulis formal audit.`;
-
-      let aiResult: any;
-      try {
-        const rawAi = await this.llmAdapter.callLlm(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1 });
-        aiResult = JSON.parse(rawAi);
-      } catch (err) {
-        this.logger.warn(`AI Gagal memproses baris "${spjItem.itemName}", menjalankan fallback deterministik.`);
-        aiResult = {
-          isMismatch: true,
-          similarityScore: 0.5,
-          specRequired: 'Tidak Teridentifikasi (Fallback)',
-          priceContract: 0.0,
-          volumeContract: 0.0,
-          analisisCopilot: `[FALLBACK SYSTEM] Terdeteksi ketidaksesuaian deskripsi secara manual pada baris SPJ "${spjItem.itemName}".`,
-        };
-      }
-
-      // 4. Hitung Deviasi Finansial secara Deterministik (Math Engine)
-      const priceContract = Number(aiResult.priceContract || 0);
-      const selisihHarga = spjItem.price > priceContract && priceContract > 0
-        ? (spjItem.price - priceContract) * spjItem.volume
-        : 0.0;
-
-      const status = aiResult.isMismatch || selisihHarga > 0 ? 'ANOMALI' : 'SESUAI';
-
-      // 5. Simpan ke database TrItemAuditPBJ
-      const savedItem = await this.prisma.trItemAuditPBJ.create({
-        data: {
-          kkaId: id,
-          itemName: spjItem.itemName,
-          specRequired: aiResult.specRequired || null,
-          specActual: spjItem.itemName,
-          priceContract: priceContract,
-          priceActual: spjItem.price,
-          volumeContract: Number(aiResult.volumeContract || 0),
-          volumeActual: spjItem.volume,
-          selisihHarga: selisihHarga,
-          analisisCopilot: aiResult.analisisCopilot || null,
-          status,
-          sumberPembuatan: SumberPembuatan.AI_COPILOT,
-        },
-      });
-
+      const savedItem = await this.semanticAuditService.compareAndAuditItem(
+        kka.stId,
+        id,
+        spjItem,
+      );
       auditResults.push(savedItem);
     }
 
