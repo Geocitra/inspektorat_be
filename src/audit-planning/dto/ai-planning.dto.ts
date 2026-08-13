@@ -21,5 +21,16 @@ export const GenerateDraftSchema = z.object({
     .optional(),
 });
 
+// [FITUR BARU] Schema untuk memvalidasi input dari Upload File PKPT (BYOD)
+export const ParseDocumentSchema = z.object({
+  // Gunakan z.coerce.number() karena data dari FormData multipart akan selalu terbaca sebagai string
+  tahunAnggaran: z.coerce
+    .number({ required_error: 'Tahun anggaran wajib diisi' })
+    .int('Tahun anggaran harus berupa angka bulat')
+    .min(2020, 'Tahun anggaran minimal 2020')
+    .max(2100, 'Tahun anggaran maksimal 2100'),
+});
+
 export type CalculateRiskDto = z.infer<typeof CalculateRiskSchema>;
 export type GenerateDraftDto = z.infer<typeof GenerateDraftSchema>;
+export type ParseDocumentDto = z.infer<typeof ParseDocumentSchema>; // [FITUR BARU]

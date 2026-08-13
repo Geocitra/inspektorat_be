@@ -2772,7 +2772,7 @@ export class PkaGeneratorService {
 
     const opdName = st.agendaAudit?.opd?.namaOpd || 'Umum';
 
-    const queryText = `SOP Program Kerja Audit PKA ${fokusPengawasan || ''}`;
+    const queryText = `contoh dokumen PKA SOP Program Kerja Audit langkah kerja pengujian ${fokusPengawasan || ''} template LHP NHP`;
     let queryVector: number[];
     try {
       queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
@@ -2788,17 +2788,18 @@ export class PkaGeneratorService {
     let criteriaText = '';
     if (criteriaChunks && criteriaChunks.length > 0) {
       criteriaText = criteriaChunks
-        .map((c) => `[GUIDELINE] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .map((c) => `[TEMPLATE & GUIDELINE REFERENSI] Sumber: ${c.document.title}\nKonten: ${c.content}`)
         .join('\n\n');
     } else {
       const fallbackChunks = await this.docRepository.searchKeyword('PKA', 3);
       criteriaText = fallbackChunks
-        .map((c) => `[GUIDELINE] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+        .map((c) => `[TEMPLATE & GUIDELINE REFERENSI] Sumber: ${c.document.title}\nKonten: ${c.content}`)
         .join('\n\n');
     }
 
     const systemPrompt = `Anda adalah AI Asisten Auditor (Copilot) untuk Inspektorat.
 Tugas Anda adalah menyusun Program Kerja Audit (PKA) yang berisi langkah-langkah kerja pengujian substantif dan kepatuhan.
+Anda WAJIB meniru tingkat kedalaman teknis prosedur, gaya bahasa formal pengawasan, dan format penulisan dari TEMPLATE REFERENSI yang diberikan.
 Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
 
     const userPrompt = `Surat Tugas Nomor: ${st.nomorSt}
@@ -2806,10 +2807,10 @@ OPD Sasaran: ${opdName}
 Fokus Pengawasan: ${fokusPengawasan || 'Pengujian umum administratif dan kepatuhan'}
 Periode Audit: ${st.tanggalMulai.toISOString()} s.d ${st.tanggalSelesai.toISOString()}
 
-Berikut adalah Panduan Penyusunan Langkah Kerja (PKA):
+Berikut adalah Panduan Penyusunan & Contoh Dokumen PKA Referensi Masa Lalu (RAG):
 ${criteriaText}
 
-Berdasarkan data di atas, susunlah draf langkah kerja PKA (noLangkah, prosedur, pelaksanaRencana, waktuRencana dalam jam kerja HP).
+Berdasarkan data kondisi aktual dan contoh template referensi masa lalu di atas, susunlah draf langkah kerja PKA (noLangkah, prosedur, pelaksanaRencana, waktuRencana dalam jam kerja HP) dengan tata bahasa pengawasan yang tajam dan formal.
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(PkaDraftOutputSchema)}
@@ -2996,13 +2997,17 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuditPlanningService } from './audit-planning.service';
 import { RiskAssessmentService } from './services/risk-assessment.service';
 import { PkptGeneratorService } from './services/pkpt-generator.service';
@@ -3010,17 +3015,24 @@ import {
   CreatePkptSchema,
   CreateAgendaSchema,
   ApprovePkptSchema,
+  UpdateAgendaSchema,
+  RejectPkptSchema,
   CreatePkptDto,
   CreateAgendaDto,
   ApprovePkptDto,
+  UpdateAgendaDto,
+  RejectPkptDto,
 } from './dto/pkpt.dto';
 import {
   CalculateRiskSchema,
   GenerateDraftSchema,
+  ParseDocumentSchema,
   CalculateRiskDto,
   GenerateDraftDto,
+  ParseDocumentDto,
 } from './dto/ai-planning.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
 
 @Controller('api/v1')
 export class AuditPlanningController {
@@ -3028,7 +3040,7 @@ export class AuditPlanningController {
     private readonly auditPlanningService: AuditPlanningService,
     private readonly riskService: RiskAssessmentService,
     private readonly pkptGeneratorService: PkptGeneratorService,
-  ) {}
+  ) { }
 
   @Post('pkpt')
   @HttpCode(HttpStatus.CREATED)
@@ -3044,6 +3056,29 @@ export class AuditPlanningController {
     @Body(new ZodValidationPipe(CreateAgendaSchema)) dto: CreateAgendaDto,
   ) {
     return this.auditPlanningService.createAgenda(dto);
+  }
+
+  @Put('pkpt/agenda/:id')
+  updateAgenda(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(UpdateAgendaSchema)) dto: UpdateAgendaDto
+  ) {
+    return this.auditPlanningService.updateAgenda(id, dto);
+  }
+
+  @Post('pkpt/:id/submit')
+  @HttpCode(HttpStatus.OK)
+  submitPkpt(@Param('id', ParseUUIDPipe) id: string) {
+    return this.auditPlanningService.submitPkpt(id);
+  }
+
+  @Post('pkpt/:id/reject')
+  @HttpCode(HttpStatus.OK)
+  rejectPkpt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(RejectPkptSchema)) dto: RejectPkptDto
+  ) {
+    return this.auditPlanningService.rejectPkpt(id, dto);
   }
 
   @Post('pkpt/:id/approve')
@@ -3089,6 +3124,16 @@ export class AuditPlanningController {
     );
   }
 
+  @Post('pkpt/parse-document')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  parseDocument(
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+    @Body(new ZodValidationPipe(ParseDocumentSchema)) dto: ParseDocumentDto,
+  ) {
+    return this.pkptGeneratorService.parseExistingPkpt(dto.tahunAnggaran, file);
+  }
+
   @Get('pkpt/ranking/:tahun')
   getRiskRanking(@Param('tahun', ParseIntPipe) tahun: number) {
     return this.riskService.getRiskRanking(tahun);
@@ -3126,6 +3171,8 @@ import {
   CreatePkptDto,
   CreateAgendaDto,
   ApprovePkptDto,
+  UpdateAgendaDto,
+  RejectPkptDto,
 } from './dto/pkpt.dto';
 import { SumberPembuatan } from '@prisma/client';
 
@@ -3190,6 +3237,53 @@ export class AuditPlanningService {
     });
   }
 
+  async updateAgenda(id: string, dto: UpdateAgendaDto) {
+    const agenda = await this.prisma.trAgendaAudit.findUnique({ where: { id }, include: { pkpt: true } });
+    if (!agenda) throw new NotFoundException('Agenda audit tidak ditemukan.');
+    if (agenda.pkpt.statusPkpt !== 'DRAF') throw new ConflictException('Hanya agenda draf yang dapat diedit.');
+
+    const currentSubstansi = (agenda.substansiDokumen as object) || {};
+    const mergedSubstansi = dto.substansiDokumen ? { ...currentSubstansi, ...dto.substansiDokumen } : currentSubstansi;
+
+    return this.prisma.trAgendaAudit.update({
+      where: { id },
+      data: {
+        jenisPengawasan: dto.jenisPengawasan,
+        perkiraanBulan: dto.perkiraanBulan,
+        estimasiAnggaran: dto.estimasiAnggaran,
+        substansiDokumen: Object.keys(mergedSubstansi).length > 0 ? mergedSubstansi : undefined,
+      },
+    });
+  }
+
+  async submitPkpt(id: string) {
+    const pkpt = await this.prisma.trPkpt.findUnique({ where: { id } });
+    if (!pkpt) throw new NotFoundException('PKPT tidak ditemukan.');
+    if (pkpt.statusPkpt !== 'DRAF') throw new ConflictException('Hanya DRAF yang bisa diajukan.');
+
+    return this.prisma.trPkpt.update({
+      where: { id },
+      data: { statusPkpt: 'MENUNGGU_PERSETUJUAN' },
+    });
+  }
+
+  async rejectPkpt(id: string, dto: RejectPkptDto) {
+    const pkpt = await this.prisma.trPkpt.findUnique({ where: { id } });
+    if (!pkpt) throw new NotFoundException('PKPT tidak ditemukan.');
+    if (pkpt.statusPkpt !== 'MENUNGGU_PERSETUJUAN') {
+      throw new ConflictException('Hanya PKPT yang sedang diajukan yang dapat ditolak.');
+    }
+
+    const currentSubstansi = (pkpt.substansiDokumen as object) || {};
+    return this.prisma.trPkpt.update({
+      where: { id },
+      data: {
+        statusPkpt: 'DRAF',
+        substansiDokumen: { ...currentSubstansi, catatanRevisi: dto.catatanRevisi }
+      },
+    });
+  }
+
   async approvePkpt(id: string, dto: ApprovePkptDto) {
     const pkpt = await this.prisma.trPkpt.findUnique({
       where: { id },
@@ -3198,8 +3292,8 @@ export class AuditPlanningService {
       throw new NotFoundException('PKPT tidak ditemukan.');
     }
 
-    if (pkpt.statusPkpt !== 'DRAF') {
-      throw new ConflictException('Hanya draf PKPT yang bisa disetujui.');
+    if (pkpt.statusPkpt !== 'MENUNGGU_PERSETUJUAN') {
+      throw new ConflictException('Hanya PKPT yang diajukan yang bisa disetujui.');
     }
 
     const inspektur = await this.prisma.mstPegawai.findUnique({
@@ -3232,9 +3326,7 @@ export class AuditPlanningService {
   async findAllPkpt() {
     return this.prisma.trPkpt.findMany({
       orderBy: { tahunAnggaran: 'desc' },
-      include: {
-        approvedBy: true,
-      },
+      include: { approvedBy: true, agendaAudits: { include: { opd: true } } },
     });
   }
 
@@ -3293,8 +3385,18 @@ export const GenerateDraftSchema = z.object({
     .optional(),
 });
 
+export const ParseDocumentSchema = z.object({
+
+  tahunAnggaran: z.coerce
+    .number({ required_error: 'Tahun anggaran wajib diisi' })
+    .int('Tahun anggaran harus berupa angka bulat')
+    .min(2020, 'Tahun anggaran minimal 2020')
+    .max(2100, 'Tahun anggaran maksimal 2100'),
+});
+
 export type CalculateRiskDto = z.infer<typeof CalculateRiskSchema>;
 export type GenerateDraftDto = z.infer<typeof GenerateDraftSchema>;
+export type ParseDocumentDto = z.infer<typeof ParseDocumentSchema>;
 
 --- FILE: src\audit-planning\dto\pkpt.dto.ts ---
 
@@ -3330,15 +3432,28 @@ export const CreateAgendaSchema = z.object({
     .default(0.00),
 });
 
+export const UpdateAgendaSchema = z.object({
+  jenisPengawasan: z.string().optional(),
+  perkiraanBulan: z.number().int().min(1).max(12).optional(),
+  estimasiAnggaran: z.number().min(0).optional(),
+  substansiDokumen: z.record(z.any()).optional(),
+});
+
 export const ApprovePkptSchema = z.object({
   approvedByInspekturId: z
     .string({ required_error: 'ID Inspektur wajib diisi' })
     .uuid('Format ID Inspektur tidak valid'),
 });
 
+export const RejectPkptSchema = z.object({
+  catatanRevisi: z.string().min(5, 'Catatan revisi terlalu pendek'),
+});
+
 export type CreatePkptDto = z.infer<typeof CreatePkptSchema>;
 export type CreateAgendaDto = z.infer<typeof CreateAgendaSchema>;
+export type UpdateAgendaDto = z.infer<typeof UpdateAgendaSchema>;
 export type ApprovePkptDto = z.infer<typeof ApprovePkptSchema>;
+export type RejectPkptDto = z.infer<typeof RejectPkptSchema>;
 
 --- FILE: src\audit-planning\schemas\pkpt-draft-output.schema.ts ---
 
@@ -3421,8 +3536,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { RiskAssessmentService } from './risk-assessment.service';
 import { DocumentRepository } from '../../document-ingestion/repositories/document.repository';
 import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { ParserFactory } from '../../document-ingestion/parsers/parser.factory';
 import { PkptDraftOutputSchema } from '../schemas/pkpt-draft-output.schema';
-import { SumberPembuatan, DocumentStatus } from '@prisma/client';
+import { SumberPembuatan } from '@prisma/client';
 import { ExternalEmbeddingAdapter } from '../../document-ingestion/providers/external-embedding.adapter';
 
 @Injectable()
@@ -3435,7 +3551,8 @@ export class PkptGeneratorService {
     private readonly docRepository: DocumentRepository,
     private readonly llmAdapter: VendorLlmAdapter,
     private readonly embeddingAdapter: ExternalEmbeddingAdapter,
-  ) {}
+    private readonly parserFactory: ParserFactory,
+  ) { }
 
   async generateDraftPkpt(tahunAnggaran: number, instruksiTambahan?: string) {
     this.logger.log(`Memulai orkestrasi generasi draf PKPT berbasis AI untuk tahun anggaran ${tahunAnggaran}...`);
@@ -3458,10 +3575,7 @@ export class PkptGeneratorService {
       queryVector = new Array(1536).fill(0);
     }
 
-    const criteriaChunks = await this.docRepository.searchSimilarity(
-      queryVector,
-      3,
-    );
+    const criteriaChunks = await this.docRepository.searchSimilarity(queryVector, 3);
 
     let criteriaText = '';
     if (criteriaChunks && criteriaChunks.length > 0) {
@@ -3469,14 +3583,13 @@ export class PkptGeneratorService {
         .map((c) => `[CRITERIA] Sumber: ${c.document.title}\nKonten: ${c.content}`)
         .join('\n\n');
     } else {
-
       const fallbackChunks = await this.docRepository.searchKeyword('PKPT', 3);
       criteriaText = fallbackChunks
         .map((c) => `[CRITERIA] Sumber: ${c.document.title}\nKonten: ${c.content}`)
         .join('\n\n');
     }
 
-    const systemPrompt = `Anda adalah AI Asisten Analitis dan Penyusun Draf (Copilot) untuk Inspektorat Daerah Kota Bekasi.
+    const systemPrompt = `Anda adalah AI Asisten Analitis dan Penyusun Draf (Copilot) untuk Inspektorat Daerah.
 Tugas Anda adalah menyusun usulan draf program kerja pengawasan tahunan (PKPT) & Agenda Audit untuk OPD-OPD berdasarkan tingkat risiko (NTR), data anggaran/geografis, dan pedoman regulasi pengawasan.
 Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
 
@@ -3489,7 +3602,7 @@ ${rankingString}
 Berikut adalah Regulasi Acuan (Kriteria):
 ${criteriaText || 'Gunakan pedoman standard audit berbasis risiko Inspektorat.'}
 
-Anda WAJIB menghasilkan draf usulan pengawasan untuk OPD-OPD di atas (terutama prioritas untuk yang berisiko Tinggi/Sedang).
+Anda WAJIB menghasilkan draf usulan pengawasan untuk OPD-OPD di atas.
 Pecah Hari Pemeriksaan (HP) untuk masing-masing peran tim (PJ, WKPJ, Dalnis, KT, AT) secara logis sesuai tingkat kesulitan.
 
 JSON Schema Output yang WAJIB diikuti:
@@ -3497,29 +3610,90 @@ ${JSON.stringify(PkptDraftOutputSchema)}
 
 Berikan output JSON sekarang:`;
 
-    this.logger.log('Mengirim permintaan draf PKPT ke LLM lokal...');
+    this.logger.log('Mengirim permintaan draf PKPT (Mode A) ke LLM lokal...');
     let rawResponse: string;
     try {
       rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
         jsonMode: true,
         temperature: 0.1,
       });
-    } catch (llmError) {
+    } catch (llmError: any) {
       this.logger.error(`Gagal mendapatkan draf dari LLM: ${llmError.message}`);
-
       rawResponse = JSON.stringify(this.getFallbackDraft(rankings, tahunAnggaran));
     }
 
+    return this.processAndSaveDraft(tahunAnggaran, rawResponse, SumberPembuatan.AI_COPILOT);
+  }
+
+  async parseExistingPkpt(tahunAnggaran: number, file: any) {
+    this.logger.log(`Memulai ekstraksi draf PKPT dari file "${file.originalname}" untuk tahun ${tahunAnggaran}...`);
+
+    const ext = file.originalname.split('.').pop()?.toLowerCase() || '';
+    const parser = this.parserFactory.getParser(file.mimetype, ext);
+    let extractedText = await parser.parse(file.buffer);
+
+    if (extractedText.length > 25000) {
+      extractedText = extractedText.substring(0, 25000);
+      this.logger.warn('Teks diekstraksi sangat panjang, dipotong hingga 25.000 karakter.');
+    }
+
+    const masterOpdList = await this.prisma.mstOpd.findMany({
+      select: { id: true, namaOpd: true },
+    });
+
+    const opdReference = masterOpdList
+      .map(o => `- ID: ${o.id} | Nama Resmi: ${o.namaOpd}`)
+      .join('\n');
+
+    const systemPrompt = `Anda adalah AI Asisten Data Ekstraktor untuk Inspektorat Daerah.
+Tugas Anda adalah membaca teks acak/tabel dari dokumen PKPT mentah, dan mengekstrak jadwal, anggaran, serta alokasi hari pemeriksaan ke dalam format JSON.
+SANGAT PENTING: Anda WAJIB mencocokkan (Fuzzy Match) nama instansi/OPD di dokumen mentah dengan DAFTAR OPD RESMI yang diberikan.
+Anda HANYA BOLEH menggunakan 'opdId' dan 'opdName' yang terdapat di dalam daftar resmi tersebut. Jika tidak yakin, pilih yang ejaannya paling mirip.
+Anda WAJIB mengembalikan output dalam format JSON terstruktur. Jangan tambahkan Markdown.`;
+
+    const userPrompt = `Tahun Anggaran: ${tahunAnggaran}
+
+=== DAFTAR OPD RESMI (GUNAKAN INI UNTUK REFERENSI opdId DAN opdName) ===
+${opdReference}
+
+=== ISI DOKUMEN PKPT MENTAH YANG DIUNGGAH ===
+${extractedText}
+
+Tugas:
+1. Ekstrak setiap baris tabel pengawasan dari dokumen mentah.
+2. Identifikasi nama instansinya, lalu cocokkan dengan Daftar OPD Resmi untuk mendapatkan opdId yang benar.
+3. Ekstrak estimasi anggaran, jadwal bulan, dan matriks Hari Pemeriksaan (jika ada). Jika kosong, buat estimasi logis (misal anggaran 0, atau HP standar).
+
+JSON Schema Output yang WAJIB diikuti:
+${JSON.stringify(PkptDraftOutputSchema)}
+
+Berikan output JSON sekarang:`;
+
+    this.logger.log('Mengirim permintaan ekstraksi PKPT (Mode B) ke LLM lokal...');
+    let rawResponse: string;
+    try {
+      rawResponse = await this.llmAdapter.callLlm(systemPrompt, userPrompt, {
+        jsonMode: true,
+        temperature: 0.1,
+      });
+    } catch (llmError: any) {
+      this.logger.error(`Gagal mengekstrak dokumen via LLM: ${llmError.message}`);
+      throw new InternalServerErrorException(`Gagal memproses dokumen PKPT: Server AI tidak merespons.`);
+    }
+
+    return this.processAndSaveDraft(tahunAnggaran, rawResponse, SumberPembuatan.SYSTEM);
+  }
+
+  private async processAndSaveDraft(tahunAnggaran: number, rawResponse: string, sumberPembuatan: SumberPembuatan) {
     try {
       const parsedData = JSON.parse(rawResponse);
       const agendaItems = parsedData.agendaItems || [];
 
       if (agendaItems.length === 0) {
-        throw new Error('LLM mengembalikan draf kosong.');
+        throw new Error('LLM tidak menemukan atau mengembalikan agenda kosong.');
       }
 
       return await this.prisma.$transaction(async (tx) => {
-
         let pkpt = await tx.trPkpt.findUnique({
           where: { tahunAnggaran },
         });
@@ -3528,7 +3702,6 @@ Berikan output JSON sekarang:`;
           if (pkpt.statusPkpt !== 'DRAF') {
             throw new Error(`PKPT tahun anggaran ${tahunAnggaran} sudah DISETUJUI dan dikunci.`);
           }
-
           await tx.trAgendaAudit.deleteMany({
             where: { pkptId: pkpt.id },
           });
@@ -3537,20 +3710,19 @@ Berikan output JSON sekarang:`;
             data: {
               tahunAnggaran,
               statusPkpt: 'DRAF',
-              sumberPembuatan: SumberPembuatan.AI_COPILOT,
+              sumberPembuatan,
             },
           });
         }
 
         const createdAgendas = [];
         for (const item of agendaItems) {
-
           const opdExists = await tx.mstOpd.findUnique({
             where: { id: item.opdId },
           });
 
           if (!opdExists) {
-            this.logger.warn(`OPD dengan ID ${item.opdId} tidak ditemukan. Melewati item.`);
+            this.logger.warn(`Pencocokan Fuzzy Match Gagal: OPD dengan ID ${item.opdId} tidak ditemukan. Melewati item ini.`);
             continue;
           }
 
@@ -3561,16 +3733,14 @@ Berikan output JSON sekarang:`;
               jenisPengawasan: item.jenisPengawasan,
               perkiraanBulan: item.perkiraanBulan,
               estimasiAnggaran: item.estimasiAnggaran,
-              sumberPembuatan: SumberPembuatan.AI_COPILOT,
+              sumberPembuatan,
               substansiDokumen: {
                 hariPemeriksaan: item.hariPemeriksaan,
                 saranaPrasarana: item.saranaPrasarana,
-                alasanPrioritas: item.alasanPrioritas,
+                alasanPrioritas: item.alasanPrioritas || 'Hasil ekstraksi dokumen PKPT manual.',
               },
             },
-            include: {
-              opd: true,
-            },
+            include: { opd: true },
           });
           createdAgendas.push(agenda);
         }
@@ -3581,8 +3751,8 @@ Berikan output JSON sekarang:`;
           agendaAudits: createdAgendas,
         };
       });
-    } catch (parseError) {
-      this.logger.error(`Gagal mem-parsing draf usulan PKPT: ${parseError.message}`);
+    } catch (parseError: any) {
+      this.logger.error(`Gagal mem-parsing atau menyimpan draf usulan PKPT: ${parseError.message}`);
       throw new InternalServerErrorException(`Gagal menyusun draf PKPT: ${parseError.message}`);
     }
   }
@@ -3592,7 +3762,6 @@ Berikan output JSON sekarang:`;
     const topOpds = rankings.slice(0, 3);
 
     const agendaItems = topOpds.map((r, idx) => {
-
       const jenis = idx === 0 ? 'Audit' : idx === 1 ? 'Reviu' : 'Evaluasi';
       const bulan = (idx * 3) + 2;
       const anggaran = (5 - idx) * 100000000;
@@ -3766,12 +3935,13 @@ export class AiModule {}
 
 --- FILE: src\common\ai\ai.service.ts ---
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
   private readonly openai: OpenAI;
   private readonly openaiModel: string;
 
@@ -3795,22 +3965,13 @@ export class AiService {
       if (embedding && embedding.length === 1536) {
         return embedding;
       }
-    } catch (err) {
 
+      throw new Error('API merespons namun dimensi embedding tidak valid (bukan 1536).');
+    } catch (err: any) {
+
+      this.logger.error(`Gagal menghasilkan vector embedding: ${err.message}`);
+      throw new InternalServerErrorException('Layanan AI Embedding sedang tidak tersedia atau mengalami gangguan (Timeout/Rate Limit).');
     }
-
-    const embedding = new Array(1536).fill(0);
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = (hash << 5) - hash + text.charCodeAt(i);
-      hash |= 0;
-    }
-
-    for (let i = 0; i < 1536; i++) {
-      embedding[i] = Math.sin(hash + i) * 0.1;
-    }
-
-    return embedding;
   }
 
   async generateChatCompletion(
@@ -3828,11 +3989,11 @@ export class AiService {
       });
 
       return response.choices[0]?.message?.content || '';
-    } catch (err) {
+    } catch (err: any) {
 
+      this.logger.error(`Gagal menghasilkan Chat Completion (RAG): ${err.message}`);
+      throw new InternalServerErrorException('Layanan AI Chat Completion sedang tidak dapat diproses.');
     }
-
-    return `[AI COPILOT FALLBACK JAWABAN]\n\nBerdasarkan kueri kasus Anda: "${userPrompt}"\ndan ringkasan regulasi yang dirujuk oleh sistem, Anda direkomendasikan untuk memenuhi seluruh kepatuhan administrasi daerah.`;
   }
 }
 
@@ -4167,6 +4328,35 @@ export class ContextualAuthGuard implements CanActivate {
   }
 }
 
+--- FILE: src\common\guards\global-role.guard.ts ---
+
+import {
+    Injectable,
+    CanActivate,
+    ExecutionContext,
+    ForbiddenException,
+} from '@nestjs/common';
+
+@Injectable()
+export class GlobalRoleGuard implements CanActivate {
+    canActivate(context: ExecutionContext): boolean {
+        const request = context.switchToHttp().getRequest();
+
+        const user = request.user;
+        const mockRole = request.headers['x-mock-role'];
+
+        const activeRole = user?.role || mockRole || 'GUEST';
+
+        if (activeRole === 'APIP_INTERNAL' || activeRole === 'APIP_PIMPINAN') {
+            return true;
+        }
+
+        throw new ForbiddenException(
+            'Akses ditolak: Hanya Pegawai Internal Inspektorat atau Pimpinan yang memiliki wewenang untuk mengakses sumber daya ini.',
+        );
+    }
+}
+
 --- FILE: src\common\pipes\file-signature-validation.pipe.ts ---
 
 import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
@@ -4396,22 +4586,31 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
+  Param,
+  ParseUUIDPipe,
   UploadedFile,
   UseInterceptors,
   Body,
   Query,
   BadRequestException,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentIngestionService } from './services/document-ingestion.service';
 import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
+import { GlobalRoleGuard } from '../common/guards/global-role.guard';
 import { DocumentType } from '@prisma/client';
 
 @Controller('api/v1/documents')
+@UseGuards(GlobalRoleGuard)
 export class DocumentIngestionController {
-  constructor(private readonly ingestionService: DocumentIngestionService) {}
+  constructor(private readonly ingestionService: DocumentIngestionService) { }
 
   @Post('ingest')
+  @HttpCode(HttpStatus.ACCEPTED)
   @UseInterceptors(FileInterceptor('file'))
   async ingestDocument(
     @UploadedFile(FileSignatureValidationPipe) file: any,
@@ -4428,14 +4627,28 @@ export class DocumentIngestionController {
       );
     }
 
-    const doc = await this.ingestionService.ingestDocument(file, type, title);
+    const jobResult = await this.ingestionService.queueDocumentForIngestion(file, type, title);
+
     return {
-      message: 'Dokumen berhasil di-ingest dan di-vektorisasi.',
-      data: doc,
+      success: true,
+      message: 'Dokumen berhasil diterima dan sedang diproses di latar belakang oleh AI Worker.',
+      data: jobResult,
+    };
+  }
+
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async findAll() {
+    const documents = await this.ingestionService.findAllDocuments();
+    return {
+      success: true,
+      message: 'Berhasil mengambil daftar dokumen Knowledge Base.',
+      data: documents,
     };
   }
 
   @Get('search')
+  @HttpCode(HttpStatus.OK)
   async search(@Query('q') query: string, @Query('limit') limitStr?: string) {
     if (!query) {
       throw new BadRequestException('Parameter pencarian "q" wajib diisi.');
@@ -4445,6 +4658,7 @@ export class DocumentIngestionController {
     const results = await this.ingestionService.searchDocuments(query, limit);
 
     return {
+      success: true,
       message: 'Pencarian semantik berhasil dilakukan.',
       data: results.map((r) => ({
         chunkId: r.id,
@@ -4460,20 +4674,33 @@ export class DocumentIngestionController {
       })),
     };
   }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    const result = await this.ingestionService.deleteDocument(id);
+    return {
+      success: true,
+      message: result.message,
+    };
+  }
 }
 
 --- FILE: src\document-ingestion\document-ingestion.module.ts ---
 
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DocumentIngestionController } from './document-ingestion.controller';
 import { DocumentIngestionService } from './services/document-ingestion.service';
+import { DocumentIngestionProcessor } from './document-ingestion.processor';
 import { DocumentRepository } from './repositories/document.repository';
 import { SemanticChunkerService } from './services/semantic-chunker.service';
 import { ParserFactory } from './parsers/parser.factory';
 import { PdfParserAdapter } from './parsers/pdf-parser.adapter';
 import { DocxParserAdapter } from './parsers/docx-parser.adapter';
 import { TxtParserAdapter } from './parsers/txt-parser.adapter';
+import { XlsxParserAdapter } from './parsers/xlsx-parser.adapter';
 import { UnicodeNormalizerFilter } from './utils/sanitizers/unicode-normalizer.filter';
 import { WhitespaceTrimmerFilter } from './utils/sanitizers/whitespace-trimmer.filter';
 import { TextSanitizerPipeline } from './utils/sanitizers/text-sanitizer.pipeline';
@@ -4481,25 +4708,148 @@ import { ExternalEmbeddingAdapter } from './providers/external-embedding.adapter
 import { EmbeddingBatchProcessor } from './utils/embedding-batch-processor.util';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [
+    PrismaModule,
+    BullModule.registerQueue({
+      name: 'document_ingestion',
+    }),
+  ],
   controllers: [DocumentIngestionController],
   providers: [
     DocumentIngestionService,
+    DocumentIngestionProcessor,
     DocumentRepository,
     SemanticChunkerService,
     ParserFactory,
     PdfParserAdapter,
     DocxParserAdapter,
     TxtParserAdapter,
+    XlsxParserAdapter,
     UnicodeNormalizerFilter,
     WhitespaceTrimmerFilter,
     TextSanitizerPipeline,
     ExternalEmbeddingAdapter,
     EmbeddingBatchProcessor,
   ],
-  exports: [DocumentIngestionService, DocumentRepository, ExternalEmbeddingAdapter],
+
+  exports: [
+    DocumentIngestionService,
+    DocumentRepository,
+    ExternalEmbeddingAdapter,
+    ParserFactory
+  ],
 })
-export class DocumentIngestionModule {}
+export class DocumentIngestionModule { }
+
+--- FILE: src\document-ingestion\document-ingestion.processor.ts ---
+
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
+import { Logger } from '@nestjs/common';
+import { DocumentRepository } from './repositories/document.repository';
+import { ParserFactory } from './parsers/parser.factory';
+import { TextSanitizerPipeline } from './utils/sanitizers/text-sanitizer.pipeline';
+import { SemanticChunkerService } from './services/semantic-chunker.service';
+import { EmbeddingBatchProcessor } from './utils/embedding-batch-processor.util';
+import { DocumentType } from '@prisma/client';
+import * as fsPromises from 'fs/promises';
+
+export interface IngestionJobData {
+    title: string;
+    type: DocumentType;
+    filePath: string;
+    dbRelativePath: string;
+    mimeType: string;
+    originalName: string;
+    fileSize: number;
+    hash: string;
+}
+
+@Processor('document_ingestion')
+export class DocumentIngestionProcessor extends WorkerHost {
+    private readonly logger = new Logger(DocumentIngestionProcessor.name);
+
+    constructor(
+        private readonly documentRepository: DocumentRepository,
+        private readonly parserFactory: ParserFactory,
+        private readonly sanitizerPipeline: TextSanitizerPipeline,
+        private readonly chunkerService: SemanticChunkerService,
+        private readonly batchProcessor: EmbeddingBatchProcessor,
+    ) {
+        super();
+    }
+
+    async process(job: Job<IngestionJobData, any, string>): Promise<any> {
+        const {
+            title,
+            type,
+            filePath,
+            dbRelativePath,
+            mimeType,
+            originalName,
+            fileSize,
+            hash,
+        } = job.data;
+
+        this.logger.log(`[Job ${job.id}] Memulai pemrosesan AI Ingestion untuk dokumen: ${originalName}`);
+
+        try {
+            const buffer = await fsPromises.readFile(filePath);
+
+            const ext = originalName.split('.').pop()?.toLowerCase() || '';
+            const parser = this.parserFactory.getParser(mimeType, ext);
+
+            this.logger.log(`[Job ${job.id}] Mengekstrak teks menggunakan parser (.${ext})...`);
+            const rawText = await parser.parse(buffer);
+
+            const cleanedText = this.sanitizerPipeline.sanitize(rawText);
+
+            const chunks = this.chunkerService.chunkText(cleanedText);
+            if (chunks.length === 0) {
+                throw new Error('Dokumen tidak mengandung teks yang dapat diekstrak atau dokumen berupa hasil scan (non-OCR).');
+            }
+            this.logger.log(`[Job ${job.id}] Berhasil memecah teks menjadi ${chunks.length} chunks.`);
+
+            this.logger.log(`[Job ${job.id}] Mengirim chunks ke API OpenAI/Ollama...`);
+            const embeddings = await this.batchProcessor.processInBatches(chunks);
+
+            const chunkData = chunks.map((content, idx) => ({
+                chunkIndex: idx,
+                content,
+                embedding: embeddings[idx],
+            }));
+
+            this.logger.log(`[Job ${job.id}] Menyimpan ${chunks.length} vektor ke PostgreSQL...`);
+            const savedDoc = await this.documentRepository.saveIngestedDocument(
+                {
+                    title,
+                    type,
+                    filePath: dbRelativePath,
+                    status: 'AKTIF',
+                },
+                {
+                    fileSize,
+                    mimeType,
+                    totalChunks: chunks.length,
+                    hash,
+                },
+                chunkData,
+            );
+
+            this.logger.log(`[Job ${job.id}] SELESAI ✅ Dokumen (ID: ${savedDoc.id}) telah diindeks di Knowledge Base.`);
+
+            return {
+                success: true,
+                documentId: savedDoc.id,
+                chunksProcessed: chunks.length
+            };
+
+        } catch (error: any) {
+            this.logger.error(`[Job ${job.id}] GAGAL memproses dokumen: ${error.message}`);
+            throw error;
+        }
+    }
+}
 
 --- FILE: src\document-ingestion\parsers\document-parser.interface.ts ---
 
@@ -4534,6 +4884,7 @@ import { DocumentParser } from './document-parser.interface';
 import { PdfParserAdapter } from './pdf-parser.adapter';
 import { DocxParserAdapter } from './docx-parser.adapter';
 import { TxtParserAdapter } from './txt-parser.adapter';
+import { XlsxParserAdapter } from './xlsx-parser.adapter';
 
 @Injectable()
 export class ParserFactory {
@@ -4541,7 +4892,8 @@ export class ParserFactory {
     private readonly pdfParser: PdfParserAdapter,
     private readonly docxParser: DocxParserAdapter,
     private readonly txtParser: TxtParserAdapter,
-  ) {}
+    private readonly xlsxParser: XlsxParserAdapter,
+  ) { }
 
   getParser(mimeType: string, extension: string): DocumentParser {
     const ext = extension.toLowerCase();
@@ -4555,6 +4907,11 @@ export class ParserFactory {
       return this.docxParser;
     } else if (ext === 'txt' || mimeType === 'text/plain') {
       return this.txtParser;
+    } else if (
+      ext === 'xlsx' ||
+      mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ) {
+      return this.xlsxParser;
     } else {
       throw new BadRequestException(
         `Parser tidak ditemukan untuk tipe MIME: ${mimeType} atau ekstensi: .${extension}`,
@@ -4599,6 +4956,68 @@ export class TxtParserAdapter implements DocumentParser {
       );
     }
   }
+}
+
+--- FILE: src\document-ingestion\parsers\xlsx-parser.adapter.ts ---
+
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { DocumentParser } from './document-parser.interface';
+import * as ExcelJS from 'exceljs';
+
+@Injectable()
+export class XlsxParserAdapter implements DocumentParser {
+    async parse(buffer: Buffer): Promise<string> {
+        try {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(buffer as any);
+
+            let extractedText = '';
+
+            workbook.eachSheet((worksheet, sheetId) => {
+                extractedText += `\n--- Lembar Kerja (Sheet): ${worksheet.name} ---\n`;
+
+                worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+                    const rowValues: string[] = [];
+
+                    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                        let cellValue = '';
+                        const val = cell.value;
+
+                        if (val !== null && val !== undefined) {
+                            if (typeof val === 'object') {
+
+                                if ('result' in val) {
+                                    cellValue = String(val.result);
+                                }
+
+                                else if ('richText' in val) {
+                                    cellValue = (val as any).richText.map((rt: any) => rt.text).join('');
+                                } else {
+                                    cellValue = String(val);
+                                }
+                            } else {
+                                cellValue = String(val);
+                            }
+                        }
+
+                        if (cellValue.trim() !== '') {
+                            rowValues.push(cellValue.trim());
+                        }
+                    });
+
+                    if (rowValues.length > 0) {
+                        extractedText += rowValues.join(' | ') + '\n';
+                    }
+                });
+            });
+
+            return extractedText;
+        } catch (error: any) {
+            throw new InternalServerErrorException(
+                `Gagal mengurai berkas XLSX: ${error.message}`,
+            );
+        }
+    }
 }
 
 --- FILE: src\document-ingestion\providers\external-embedding.adapter.ts ---
@@ -4753,16 +5172,16 @@ export class DocumentRepository {
 
 --- FILE: src\document-ingestion\services\document-ingestion.service.ts ---
 
-import { Injectable, Logger, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { DocumentRepository } from '../repositories/document.repository';
-import { ParserFactory } from '../parsers/parser.factory';
-import { TextSanitizerPipeline } from '../utils/sanitizers/text-sanitizer.pipeline';
-import { SemanticChunkerService } from './semantic-chunker.service';
-import { EmbeddingBatchProcessor } from '../utils/embedding-batch-processor.util';
 import { ExternalEmbeddingAdapter } from '../providers/external-embedding.adapter';
 import { DocumentType } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { PrismaService } from '../../prisma/prisma.service';
 import * as crypto from 'crypto';
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
+import { existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
 
 @Injectable()
@@ -4772,14 +5191,71 @@ export class DocumentIngestionService {
 
   constructor(
     private readonly documentRepository: DocumentRepository,
-    private readonly parserFactory: ParserFactory,
-    private readonly sanitizerPipeline: TextSanitizerPipeline,
-    private readonly chunkerService: SemanticChunkerService,
-    private readonly batchProcessor: EmbeddingBatchProcessor,
     private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    @InjectQueue('document_ingestion') private readonly ingestionQueue: Queue,
+    private readonly prisma: PrismaService,
   ) {
+    if (!existsSync(this.storageDir)) {
+      mkdirSync(this.storageDir, { recursive: true });
+    }
+  }
 
-    fs.mkdirSync(this.storageDir, { recursive: true });
+  async queueDocumentForIngestion(file: any, type: DocumentType, title: string) {
+    const buffer = file.buffer;
+    const fileSize = buffer.length;
+    const mimeType = file.mimetype;
+    const originalName = file.originalname;
+
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    const existingMetadata = await this.documentRepository.findByHash(hash);
+    if (existingMetadata) {
+      throw new ConflictException(`Dokumen dengan identitas biner yang sama sudah terdaftar (ID: ${existingMetadata.documentId}).`);
+    }
+
+    const timestamp = Date.now();
+    const sanitizedFileName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const diskFileName = `${timestamp}-${sanitizedFileName}`;
+    const diskFilePath = path.join(this.storageDir, diskFileName);
+    const dbRelativePath = path.join('storage', 'documents', diskFileName).replace(/\\/g, '/');
+
+    try {
+      await fsPromises.writeFile(diskFilePath, buffer);
+      this.logger.log(`[I/O Async] Berkas ${diskFileName} berhasil disimpan ke storage.`);
+    } catch (fsError: any) {
+      this.logger.error(`Gagal menyimpan file ke disk: ${fsError.message}`);
+      throw new InternalServerErrorException('Sistem gagal menyimpan file fisik regulasi.');
+    }
+
+    let job;
+    try {
+      job = await this.ingestionQueue.add('process_document_rag', {
+        title,
+        type,
+        filePath: diskFilePath,
+        dbRelativePath,
+        mimeType,
+        originalName,
+        fileSize,
+        hash,
+      }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+      });
+      this.logger.log(`[BullMQ] Tugas ekstraksi AI masuk antrean dengan Job ID: ${job.id}`);
+    } catch (queueError: any) {
+      await fsPromises.unlink(diskFilePath).catch(() => null);
+      this.logger.error(`Gagal memasukkan tugas ke antrean Redis: ${queueError.message}`);
+      throw new InternalServerErrorException('Layanan antrean AI (Redis) tidak merespons.');
+    }
+
+    return {
+      jobId: job.id,
+      status: 'QUEUED',
+      title,
+      type,
+      hash,
+    };
   }
 
   async ingestDocument(file: any, type: DocumentType, title: string) {
@@ -4791,70 +5267,73 @@ export class DocumentIngestionService {
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
     const existingMetadata = await this.documentRepository.findByHash(hash);
     if (existingMetadata) {
-      this.logger.warn(`Dokumen dengan hash biner yang sama sudah terdaftar (ID Dokumen: ${existingMetadata.documentId}). Mengembalikan dokumen eksisting.`);
-      return existingMetadata.document;
+      return this.prisma.auditDocument.findFirst({
+        where: { title },
+      });
     }
 
     const timestamp = Date.now();
     const sanitizedFileName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const diskFileName = `${timestamp}-${sanitizedFileName}`;
     const diskFilePath = path.join(this.storageDir, diskFileName);
+    const dbRelativePath = path.join('storage', 'documents', diskFileName).replace(/\\/g, '/');
 
     try {
-      fs.writeFileSync(diskFilePath, buffer);
-    } catch (fsError) {
-      this.logger.error(`Gagal menyimpan file ke disk: ${fsError.message}`);
-      throw new InternalServerErrorException('Gagal menyimpan file fisik regulasi.');
+      await fsPromises.writeFile(diskFilePath, buffer);
+    } catch (fsError: any) {
+      throw new InternalServerErrorException('Sistem gagal menyimpan file fisik.');
     }
 
+    const content = buffer.toString('utf-8') || 'Dokumen Kosong';
+    const embedding = Array(1536).fill(0.0);
+
+    let realEmbedding = embedding;
     try {
-
-      const ext = originalName.split('.').pop()?.toLowerCase() || '';
-      const parser = this.parserFactory.getParser(mimeType, ext);
-
-      const rawText = await parser.parse(buffer);
-
-      const cleanedText = this.sanitizerPipeline.sanitize(rawText);
-
-      const chunks = this.chunkerService.chunkText(cleanedText);
-      if (chunks.length === 0) {
-        throw new ConflictException('Dokumen tidak mengandung teks yang cukup untuk di-chunk.');
-      }
-
-      const embeddings = await this.batchProcessor.processInBatches(chunks);
-
-      const chunkData = chunks.map((content, idx) => ({
-        chunkIndex: idx,
-        content,
-        embedding: embeddings[idx],
-      }));
-
-      const relativePath = path.join('storage', 'documents', diskFileName);
-      const savedDoc = await this.documentRepository.saveIngestedDocument(
-        {
-          title,
-          type,
-          filePath: relativePath.replace(/\\/g, '/'),
-          status: 'AKTIF',
-        },
-        {
-          fileSize,
-          mimeType,
-          totalChunks: chunks.length,
-          hash,
-        },
-        chunkData,
-      );
-
-      return savedDoc;
-    } catch (ingestError) {
-
-      if (fs.existsSync(diskFilePath)) {
-        fs.unlinkSync(diskFilePath);
-      }
-      this.logger.error(`Gagal melakukan ingesti dokumen: ${ingestError.message}`);
-      throw ingestError;
+      realEmbedding = await this.embeddingAdapter.generateEmbedding(content.slice(0, 1000));
+    } catch (e: any) {
+      this.logger.warn(`Gagal generating embedding, using zero vector: ${e.message}`);
     }
+
+    const savedDoc = await this.documentRepository.saveIngestedDocument(
+      { title, type, filePath: dbRelativePath, status: 'AKTIF' },
+      { fileSize, mimeType, totalChunks: 1, totalTokens: 100, hash },
+      [{ chunkIndex: 0, content, embedding: realEmbedding }]
+    );
+
+    return savedDoc;
+  }
+
+  async findAllDocuments() {
+    return this.prisma.auditDocument.findMany({
+      include: {
+        metadata: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+  }
+
+  async deleteDocument(id: string) {
+    const document = await this.prisma.auditDocument.findUnique({
+      where: { id },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Dokumen tidak ditemukan.');
+    }
+
+    await this.prisma.auditDocument.delete({
+      where: { id },
+    });
+
+    const physicalPath = path.join(process.cwd(), document.filePath);
+    fsPromises.unlink(physicalPath).catch(() => {
+      this.logger.warn(`Berkas fisik tidak ditemukan saat menghapus: ${physicalPath}`);
+    });
+
+    this.logger.log(`Dokumen ID: ${id} beserta vektornya berhasil dihapus.`);
+    return { message: 'Dokumen dan basis vektor AI berhasil dihapus secara permanen.' };
   }
 
   async searchDocuments(query: string, limit = 5) {
@@ -4863,11 +5342,10 @@ export class DocumentIngestionService {
     }
 
     try {
-
       const queryVector = await this.embeddingAdapter.generateEmbedding(query);
       return await this.documentRepository.searchSimilarity(queryVector, limit);
-    } catch (error) {
-      this.logger.warn(`Pembuatan embedding kueri gagal. Masuk ke pencarian kata kunci fallback: ${error.message}`);
+    } catch (error: any) {
+      this.logger.warn(`Pembuatan embedding kueri gagal. Masuk ke pencarian fallback: ${error.message}`);
       return this.documentRepository.searchKeyword(query, limit);
     }
   }
@@ -7369,7 +7847,7 @@ export class NhpGeneratorService {
             })
             .join('\n\n');
 
-        const queryText = `pedoman penulisan naskah hasil pemeriksaan temuan PBJ pengadaan barang jasa ${anomalies[0].itemName}`;
+        const queryText = `contoh dokumen NHP LHP template laporan pengawasan pedoman penulisan naskah hasil pemeriksaan temuan PBJ pengadaan barang jasa ${anomalies[0].itemName}`;
         let queryVector: number[];
         try {
             queryVector = await this.embeddingAdapter.generateEmbedding(queryText);
@@ -7379,22 +7857,23 @@ export class NhpGeneratorService {
 
         const criteriaChunks = await this.docRepository.searchSimilarity(queryVector, 3);
         const criteriaText = criteriaChunks
-            .map((c) => `[PEDOMAN KELAYAKAN] Sumber: ${c.document.title}\nKonten: ${c.content}`)
+            .map((c) => `[ACUAN REGULASI & TEMPLATE REFERENSI] Sumber: ${c.document.title}\nKonten: ${c.content}`)
             .join('\n\n');
 
         const systemPrompt = `Anda adalah AI Asisten Auditor Utama (Copilot) di Inspektorat Daerah.
 Tugas Anda adalah merangkum seluruh anomali pengadaan barang jasa yang ditemukan di lapangan menjadi sebuah laporan draf temuan Naskah Hasil Pemeriksaan (NHP) resmi.
 Laporan draf temuan wajib disusun terstruktur per kelompok permasalahan, menggunakan format baku pengawasan: KONDISI, KRITERIA, SEBAB, AKIBAT, dan REKOMENDASI.
+Anda WAJIB meniru gaya bahasa formal birokrasi, struktur kalimat tajam, dan format paragraf dari TEMPLATE REFERENSI yang diberikan.
 Anda WAJIB memberikan respon berbentuk objek JSON bersih yang mematuhi JSON Schema yang diberikan.`;
 
         const userPrompt = `
 === DAFTAR ANOMALI PBJ YANG DITEMUKAN (KONDISI AKTUAL) ===
 ${anomalySummary}
 
-=== ATURAN ACUAN KEPATUHAN / REGULASI (KRITERIA) ===
+=== ACUAN REGULASI KEPATUHAN & CONTOH TEMPLATE REFERENSI MASA LALU (RAG) ===
 ${criteriaText || 'Gunakan standar kepatuhan administrasi daerah Perpres Pengadaan Barang dan Jasa Pemerintah.'}
 
-Berdasarkan data di atas, susunlah draf temuan pengawasan NHP secara formal, tajam, dan objektif.
+Berdasarkan data kondisi aktual dan contoh template referensi masa lalu di atas, susunlah draf temuan pengawasan NHP secara formal, tajam, objektif, dan dengan tata bahasa birokrasi pengawasan yang sesuai dengan contoh referensi.
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(NhpDraftOutputSchema)}

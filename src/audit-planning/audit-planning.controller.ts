@@ -3,13 +3,17 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Param,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuditPlanningService } from './audit-planning.service';
 import { RiskAssessmentService } from './services/risk-assessment.service';
 import { PkptGeneratorService } from './services/pkpt-generator.service';
@@ -17,17 +21,24 @@ import {
   CreatePkptSchema,
   CreateAgendaSchema,
   ApprovePkptSchema,
+  UpdateAgendaSchema,
+  RejectPkptSchema,
   CreatePkptDto,
   CreateAgendaDto,
   ApprovePkptDto,
+  UpdateAgendaDto,
+  RejectPkptDto,
 } from './dto/pkpt.dto';
 import {
   CalculateRiskSchema,
   GenerateDraftSchema,
+  ParseDocumentSchema,
   CalculateRiskDto,
   GenerateDraftDto,
+  ParseDocumentDto,
 } from './dto/ai-planning.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
 
 @Controller('api/v1')
 export class AuditPlanningController {
@@ -35,11 +46,11 @@ export class AuditPlanningController {
     private readonly auditPlanningService: AuditPlanningService,
     private readonly riskService: RiskAssessmentService,
     private readonly pkptGeneratorService: PkptGeneratorService,
-  ) {}
+  ) { }
 
   /**
    * POST /api/v1/pkpt
-   * Membuat draf PKPT baru.
+   * Membuat draf PKPT baru secara manual.
    */
   @Post('pkpt')
   @HttpCode(HttpStatus.CREATED)
@@ -59,6 +70,32 @@ export class AuditPlanningController {
     @Body(new ZodValidationPipe(CreateAgendaSchema)) dto: CreateAgendaDto,
   ) {
     return this.auditPlanningService.createAgenda(dto);
+  }
+
+  // [FITUR BARU] Endpoint Update Agenda
+  @Put('pkpt/agenda/:id')
+  updateAgenda(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(UpdateAgendaSchema)) dto: UpdateAgendaDto
+  ) {
+    return this.auditPlanningService.updateAgenda(id, dto);
+  }
+
+  // [FITUR BARU] Endpoint Submit Draf
+  @Post('pkpt/:id/submit')
+  @HttpCode(HttpStatus.OK)
+  submitPkpt(@Param('id', ParseUUIDPipe) id: string) {
+    return this.auditPlanningService.submitPkpt(id);
+  }
+
+  // [FITUR BARU] Endpoint Tolak PKPT
+  @Post('pkpt/:id/reject')
+  @HttpCode(HttpStatus.OK)
+  rejectPkpt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(RejectPkptSchema)) dto: RejectPkptDto
+  ) {
+    return this.auditPlanningService.rejectPkpt(id, dto);
   }
 
   /**
@@ -115,7 +152,7 @@ export class AuditPlanningController {
 
   /**
    * POST /api/v1/pkpt/generate-draft
-   * Memicu generasi draf usulan PKPT & Agenda audit berbasis AI.
+   * Memicu generasi draf usulan PKPT & Agenda audit berbasis AI (Zero-to-Hero).
    */
   @Post('pkpt/generate-draft')
   @HttpCode(HttpStatus.OK)
@@ -126,6 +163,20 @@ export class AuditPlanningController {
       dto.tahunAnggaran,
       dto.instruksiTambahan,
     );
+  }
+
+  /**
+   * POST /api/v1/pkpt/parse-document
+   * [FITUR BARU] Memicu ekstraksi AI dari file fisik (Excel/PDF) PKPT eksisting.
+   */
+  @Post('pkpt/parse-document')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  parseDocument(
+    @UploadedFile(FileSignatureValidationPipe) file: any,
+    @Body(new ZodValidationPipe(ParseDocumentSchema)) dto: ParseDocumentDto,
+  ) {
+    return this.pkptGeneratorService.parseExistingPkpt(dto.tahunAnggaran, file);
   }
 
   /**

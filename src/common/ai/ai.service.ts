@@ -1,10 +1,11 @@
 // src/common/ai/ai.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
   private readonly openai: OpenAI;
   private readonly openaiModel: string;
 
@@ -13,13 +14,13 @@ export class AiService {
     this.openai = new OpenAI({ apiKey });
     this.openaiModel = this.configService.get<string>(
       'OPENAI_MODEL',
-      'gpt-5.4-mini',
+      'gpt-5.4-mini', // Menyesuaikan dengan standar proyek Anda
     );
   }
 
   /**
    * Menghasilkan embeddings 1536-dimensi menggunakan model text-embedding-3-small dari OpenAI.
-   * Dilengkapi fallback semi-deterministik jika API OpenAI tidak aktif.
+   * [REFACTOR] Menghapus fallback deterministik (Math.sin) untuk mencegah Vector Poisoning.
    */
   async generateEmbedding(text: string): Promise<number[]> {
     try {
@@ -32,28 +33,18 @@ export class AiService {
       if (embedding && embedding.length === 1536) {
         return embedding;
       }
-    } catch (err) {
-      // Masuk ke blok fallback jika API bermasalah
-    }
 
-    // FALLBACK SEMI-DETERMINISTIK (Agar E2E & Kueri Cosine Similarity tetap berjalan sukses di Windows dev environment)
-    const embedding = new Array(1536).fill(0);
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = (hash << 5) - hash + text.charCodeAt(i);
-      hash |= 0; // Convert to 32bit integer
+      throw new Error('API merespons namun dimensi embedding tidak valid (bukan 1536).');
+    } catch (err: any) { // [FIX] Menambahkan Typecasting : any
+      // Fail Fast: Lempar error agar ditangkap oleh mekanisme Retry BullMQ
+      this.logger.error(`Gagal menghasilkan vector embedding: ${err.message}`);
+      throw new InternalServerErrorException('Layanan AI Embedding sedang tidak tersedia atau mengalami gangguan (Timeout/Rate Limit).');
     }
-
-    for (let i = 0; i < 1536; i++) {
-      embedding[i] = Math.sin(hash + i) * 0.1;
-    }
-
-    return embedding;
   }
 
   /**
    * Mengirim system prompt dan user prompt ke OpenAI untuk melahirkan respon RAG.
-   * Dilengkapi fallback jika API offline.
+   * [REFACTOR] Menghapus fallback statis agar sistem tidak berhalusinasi saat offline.
    */
   async generateChatCompletion(
     systemPrompt: string,
@@ -66,15 +57,14 @@ export class AiService {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0,
+        temperature: 0, // Suhu 0 untuk output deterministik & faktual
       });
 
       return response.choices[0]?.message?.content || '';
-    } catch (err) {
-      // Fallback
+    } catch (err: any) { // [FIX] Menambahkan Typecasting : any
+      // Fail Fast: Lempar error untuk di-handle oleh caller (Service/Queue)
+      this.logger.error(`Gagal menghasilkan Chat Completion (RAG): ${err.message}`);
+      throw new InternalServerErrorException('Layanan AI Chat Completion sedang tidak dapat diproses.');
     }
-
-    // Respon fallback aman yang mensimulasikan hasil pemrosesan AI lokal
-    return `[AI COPILOT FALLBACK JAWABAN]\n\nBerdasarkan kueri kasus Anda: "${userPrompt}"\ndan ringkasan regulasi yang dirujuk oleh sistem, Anda direkomendasikan untuk memenuhi seluruh kepatuhan administrasi daerah.`;
   }
 }

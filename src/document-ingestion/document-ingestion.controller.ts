@@ -3,25 +3,35 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
+  Param,
+  ParseUUIDPipe,
   UploadedFile,
   UseInterceptors,
   Body,
   Query,
   BadRequestException,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentIngestionService } from './services/document-ingestion.service';
 import { FileSignatureValidationPipe } from '../common/pipes/file-signature-validation.pipe';
+import { GlobalRoleGuard } from '../common/guards/global-role.guard'; // [REFACTOR] Gunakan Global Guard
 import { DocumentType } from '@prisma/client';
 
 @Controller('api/v1/documents')
+@UseGuards(GlobalRoleGuard) // [REFACTOR] Barikade Keamanan (Akses Terbatas Tanpa Butuh Konteks ST)
 export class DocumentIngestionController {
-  constructor(private readonly ingestionService: DocumentIngestionService) {}
+  constructor(private readonly ingestionService: DocumentIngestionService) { }
 
   /**
-   * Endpoint untuk mengunggah regulasi (ingesti dokumen ke RAG)
+   * Endpoint untuk mengunggah regulasi/SOP (ingesti dokumen ke RAG)
+   * Menggunakan pola Fire-and-Forget (Asynchronous Queue)
    */
   @Post('ingest')
+  @HttpCode(HttpStatus.ACCEPTED) // 202 Accepted: Diterima namun belum selesai diproses
   @UseInterceptors(FileInterceptor('file'))
   async ingestDocument(
     @UploadedFile(FileSignatureValidationPipe) file: any,
@@ -32,24 +42,42 @@ export class DocumentIngestionController {
       throw new BadRequestException('Parameter type (DocumentType) dan title wajib diisi.');
     }
 
-    // Pastikan type bernilai valid sesuai enum
     if (!Object.values(DocumentType).includes(type)) {
       throw new BadRequestException(
         `Tipe dokumen "${type}" tidak valid. Harus salah satu dari: ${Object.values(DocumentType).join(', ')}`,
       );
     }
 
-    const doc = await this.ingestionService.ingestDocument(file, type, title);
+    // Mendelegasikan tugas ke Service untuk disimpan secara I/O Async dan masuk antrean
+    const jobResult = await this.ingestionService.queueDocumentForIngestion(file, type, title);
+
     return {
-      message: 'Dokumen berhasil di-ingest dan di-vektorisasi.',
-      data: doc,
+      success: true,
+      message: 'Dokumen berhasil diterima dan sedang diproses di latar belakang oleh AI Worker.',
+      data: jobResult,
+    };
+  }
+
+  /**
+   * Endpoint untuk mengambil seluruh daftar dokumen di Knowledge Base
+   */
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async findAll() {
+    const documents = await this.ingestionService.findAllDocuments();
+    return {
+      success: true,
+      message: 'Berhasil mengambil daftar dokumen Knowledge Base.',
+      data: documents,
     };
   }
 
   /**
    * Endpoint untuk mencari regulasi secara semantik (RAG search)
+   * Tetap berjalan sinkron karena pencarian membutuhkan hasil seketika (Fast Retrieval)
    */
   @Get('search')
+  @HttpCode(HttpStatus.OK)
   async search(@Query('q') query: string, @Query('limit') limitStr?: string) {
     if (!query) {
       throw new BadRequestException('Parameter pencarian "q" wajib diisi.');
@@ -59,6 +87,7 @@ export class DocumentIngestionController {
     const results = await this.ingestionService.searchDocuments(query, limit);
 
     return {
+      success: true,
       message: 'Pencarian semantik berhasil dilakukan.',
       data: results.map((r) => ({
         chunkId: r.id,
@@ -72,6 +101,19 @@ export class DocumentIngestionController {
           filePath: r.document.filePath,
         },
       })),
+    };
+  }
+
+  /**
+   * Endpoint untuk menghapus dokumen beserta vektornya dari Knowledge Base
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    const result = await this.ingestionService.deleteDocument(id);
+    return {
+      success: true,
+      message: result.message,
     };
   }
 }

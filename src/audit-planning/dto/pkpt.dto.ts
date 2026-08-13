@@ -31,12 +31,27 @@ export const CreateAgendaSchema = z.object({
     .default(0.00),
 });
 
+// [FITUR BARU] Schema Edit Agenda Manual
+export const UpdateAgendaSchema = z.object({
+  jenisPengawasan: z.string().optional(),
+  perkiraanBulan: z.number().int().min(1).max(12).optional(),
+  estimasiAnggaran: z.number().min(0).optional(),
+  substansiDokumen: z.record(z.any()).optional(), // Untuk update struktur fleksibel UI
+});
+
 export const ApprovePkptSchema = z.object({
   approvedByInspekturId: z
     .string({ required_error: 'ID Inspektur wajib diisi' })
     .uuid('Format ID Inspektur tidak valid'),
 });
 
+// [FITUR BARU] Schema Penolakan PKPT
+export const RejectPkptSchema = z.object({
+  catatanRevisi: z.string().min(5, 'Catatan revisi terlalu pendek'),
+});
+
 export type CreatePkptDto = z.infer<typeof CreatePkptSchema>;
 export type CreateAgendaDto = z.infer<typeof CreateAgendaSchema>;
+export type UpdateAgendaDto = z.infer<typeof UpdateAgendaSchema>;
 export type ApprovePkptDto = z.infer<typeof ApprovePkptSchema>;
+export type RejectPkptDto = z.infer<typeof RejectPkptSchema>;

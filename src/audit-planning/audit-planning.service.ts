@@ -10,6 +10,8 @@ import {
   CreatePkptDto,
   CreateAgendaDto,
   ApprovePkptDto,
+  UpdateAgendaDto,
+  RejectPkptDto,
 } from './dto/pkpt.dto';
 import { SumberPembuatan } from '@prisma/client';
 
@@ -82,6 +84,56 @@ export class AuditPlanningService {
     });
   }
 
+  // [FITUR BARU] Edit Agenda (Jika Kasubag merubah hasil AI secara manual)
+  async updateAgenda(id: string, dto: UpdateAgendaDto) {
+    const agenda = await this.prisma.trAgendaAudit.findUnique({ where: { id }, include: { pkpt: true } });
+    if (!agenda) throw new NotFoundException('Agenda audit tidak ditemukan.');
+    if (agenda.pkpt.statusPkpt !== 'DRAF') throw new ConflictException('Hanya agenda draf yang dapat diedit.');
+
+    const currentSubstansi = (agenda.substansiDokumen as object) || {};
+    const mergedSubstansi = dto.substansiDokumen ? { ...currentSubstansi, ...dto.substansiDokumen } : currentSubstansi;
+
+    return this.prisma.trAgendaAudit.update({
+      where: { id },
+      data: {
+        jenisPengawasan: dto.jenisPengawasan,
+        perkiraanBulan: dto.perkiraanBulan,
+        estimasiAnggaran: dto.estimasiAnggaran,
+        substansiDokumen: Object.keys(mergedSubstansi).length > 0 ? mergedSubstansi : undefined,
+      },
+    });
+  }
+
+  // [FITUR BARU] Mengajukan ke Inspektur (DRAF -> MENUNGGU_PERSETUJUAN)
+  async submitPkpt(id: string) {
+    const pkpt = await this.prisma.trPkpt.findUnique({ where: { id } });
+    if (!pkpt) throw new NotFoundException('PKPT tidak ditemukan.');
+    if (pkpt.statusPkpt !== 'DRAF') throw new ConflictException('Hanya DRAF yang bisa diajukan.');
+
+    return this.prisma.trPkpt.update({
+      where: { id },
+      data: { statusPkpt: 'MENUNGGU_PERSETUJUAN' },
+    });
+  }
+
+  // [FITUR BARU] Penolakan oleh Inspektur (MENUNGGU_PERSETUJUAN -> DRAF)
+  async rejectPkpt(id: string, dto: RejectPkptDto) {
+    const pkpt = await this.prisma.trPkpt.findUnique({ where: { id } });
+    if (!pkpt) throw new NotFoundException('PKPT tidak ditemukan.');
+    if (pkpt.statusPkpt !== 'MENUNGGU_PERSETUJUAN') {
+      throw new ConflictException('Hanya PKPT yang sedang diajukan yang dapat ditolak.');
+    }
+
+    const currentSubstansi = (pkpt.substansiDokumen as object) || {};
+    return this.prisma.trPkpt.update({
+      where: { id },
+      data: { 
+        statusPkpt: 'DRAF',
+        substansiDokumen: { ...currentSubstansi, catatanRevisi: dto.catatanRevisi }
+      },
+    });
+  }
+
   /**
    * Menyetujui dan mengunci PKPT tahunan.
    */
@@ -93,8 +145,8 @@ export class AuditPlanningService {
       throw new NotFoundException('PKPT tidak ditemukan.');
     }
 
-    if (pkpt.statusPkpt !== 'DRAF') {
-      throw new ConflictException('Hanya draf PKPT yang bisa disetujui.');
+    if (pkpt.statusPkpt !== 'MENUNGGU_PERSETUJUAN') {
+      throw new ConflictException('Hanya PKPT yang diajukan yang bisa disetujui.');
     }
 
     // Validasi Inspektur (Auditor/Pegawai)
@@ -131,9 +183,7 @@ export class AuditPlanningService {
   async findAllPkpt() {
     return this.prisma.trPkpt.findMany({
       orderBy: { tahunAnggaran: 'desc' },
-      include: {
-        approvedBy: true,
-      },
+      include: { approvedBy: true, agendaAudits: { include: { opd: true } } },
     });
   }
 
