@@ -60,12 +60,12 @@ export class DocumentIngestionController {
   }
 
   /**
-   * Endpoint untuk mengambil daftar dokumen di Knowledge Base (opsional filter per OPD)
+   * Endpoint untuk mengambil daftar dokumen di Knowledge Base (opsional filter per OPD atau Surat Tugas)
    */
   @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll(@Query('opdId') opdId?: string) {
-    const documents = await this.ingestionService.findAllDocuments(opdId);
+  async findAll(@Query('opdId') opdId?: string, @Query('stId') stId?: string) {
+    const documents = await this.ingestionService.findAllDocuments(opdId, stId);
     return {
       success: true,
       message: 'Berhasil mengambil daftar dokumen Knowledge Base.',
@@ -115,6 +115,20 @@ export class DocumentIngestionController {
     return {
       success: true,
       data: jobStatus,
+    };
+  }
+
+  /**
+   * Endpoint untuk mengambil detail satu dokumen beserta seluruh chunks teks
+   */
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    const document = await this.ingestionService.findDocumentDetail(id);
+    return {
+      success: true,
+      message: 'Detail dokumen dan potongan vektor berhasil diambil.',
+      data: document,
     };
   }
 

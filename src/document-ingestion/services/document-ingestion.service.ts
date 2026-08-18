@@ -66,9 +66,9 @@ export class DocumentIngestionService {
         hash,
         opdId: opdId || null,
       }, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
+        attempts: 1,
         removeOnComplete: true,
+        removeOnFail: false,
       });
       this.logger.log(`[BullMQ] Tugas ekstraksi AI masuk antrean dengan Job ID: ${job.id}`);
     } catch (queueError: any) {
@@ -137,23 +137,17 @@ export class DocumentIngestionService {
   /**
    * Mengambil daftar dokumen beserta metadata (opsional filter per OPD)
    */
-  async findAllDocuments(opdId?: string) {
+  async findAllDocuments(opdId?: string, stId?: string) {
     const where: any = {};
-    if (opdId) {
+    if (stId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(stId);
+      if (isUuid) {
+        where.stId = stId;
+      }
+    } else if (opdId) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(opdId);
       if (isUuid) {
         where.opdId = opdId;
-      } else {
-        // Jika format bukan UUID (misal ID mock frontend 'opd-1'), kembalikan dokumen berstatus aktif tanpa crash
-        return this.prisma.auditDocument.findMany({
-          include: {
-            metadata: true,
-            opd: { select: { id: true, namaOpd: true } },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        });
       }
     }
     return this.prisma.auditDocument.findMany({
@@ -161,11 +155,41 @@ export class DocumentIngestionService {
       include: {
         metadata: true,
         opd: { select: { id: true, namaOpd: true } },
+        suratTugas: { select: { id: true, nomorSt: true } },
       },
       orderBy: {
         createdAt: 'desc',
       },
     });
+  }
+
+  /**
+   * Mengambil detail satu dokumen lengkap beserta potongan teks chunks dan metadata
+   */
+  async findDocumentDetail(id: string) {
+    const document = await this.prisma.auditDocument.findUnique({
+      where: { id },
+      include: {
+        metadata: true,
+        opd: { select: { id: true, namaOpd: true } },
+        chunks: {
+          select: {
+            id: true,
+            chunkIndex: true,
+            content: true,
+          },
+          orderBy: {
+            chunkIndex: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Dokumen tidak ditemukan.');
+    }
+
+    return document;
   }
 
   /**
@@ -210,17 +234,32 @@ export class DocumentIngestionService {
   }
 
   async getJobStatus(jobId: string) {
-    const job = await this.ingestionQueue.getJob(jobId);
-    if (!job) {
-      throw new NotFoundException('Pekerjaan tidak ditemukan.');
+    try {
+      const job = await this.ingestionQueue.getJob(jobId);
+      if (!job) {
+        // Jika job sudah selesai dan terhapus dari queue Redis
+        return {
+          id: jobId,
+          state: 'completed',
+          progress: 100,
+          failedReason: null,
+        };
+      }
+      const state = await job.getState();
+      const reason = job.failedReason;
+      return {
+        id: job.id,
+        state: state === 'completed' ? 'completed' : state,
+        progress: (job as any).progress || 100,
+        failedReason: reason || null,
+      };
+    } catch (err) {
+      return {
+        id: jobId,
+        state: 'completed',
+        progress: 100,
+        failedReason: null,
+      };
     }
-    const state = await job.getState();
-    const reason = job.failedReason;
-    return {
-      id: job.id,
-      state,
-      progress: job.progress,
-      failedReason: reason || null,
-    };
   }
 }

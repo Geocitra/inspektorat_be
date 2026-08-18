@@ -41,6 +41,10 @@ export class OpdService {
    */
   async findAll() {
     return this.prisma.mstOpd.findMany({
+      include: {
+        documents: true,
+        agendaAudits: true,
+      },
       orderBy: { namaOpd: 'asc' },
     });
   }
@@ -50,7 +54,13 @@ export class OpdService {
    * Melempar NotFoundException jika tidak ditemukan.
    */
   async findOne(id: string) {
-    const opd = await this.prisma.mstOpd.findUnique({ where: { id } });
+    const opd = await this.prisma.mstOpd.findUnique({ 
+      where: { id },
+      include: {
+        documents: true,
+        agendaAudits: true,
+      },
+    });
     if (!opd) {
       throw new NotFoundException(`OPD dengan ID "${id}" tidak ditemukan.`);
     }

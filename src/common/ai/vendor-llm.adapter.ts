@@ -66,35 +66,48 @@ export class VendorLlmAdapter {
     prompt: string,
     base64Image: string,
     options?: { model?: string; temperature?: number },
+    maxRetries = 4,
   ): Promise<string> {
     const model = options?.model || 'gpt-4o-mini'; // Model multimodal standard murah & kuat
     const temperature = options?.temperature ?? 0;
 
-    try {
-      const response = await this.openai.chat.completions.create({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`,
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await this.openai.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/jpeg;base64,${base64Image}`,
+                  },
                 },
-              },
-            ],
-          },
-        ],
-        temperature,
-      });
+              ],
+            },
+          ],
+          temperature,
+        });
 
-      return response.choices[0]?.message?.content || '';
-    } catch (error: any) {
-      this.logger.error(`Gagal menghubungi OpenAI Vision: ${error.message}`);
-      throw error;
+        return response.choices[0]?.message?.content || '';
+      } catch (error: any) {
+        const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('Rate limit');
+        if (isRateLimit && attempt < maxRetries) {
+          const waitMs = 1200 * Math.pow(1.8, attempt) + Math.floor(Math.random() * 500);
+          this.logger.warn(`OpenAI Rate Limit 429 terdeteksi. Mencoba kembali (Attempt ${attempt + 1}/${maxRetries}) setelah ${waitMs}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
+          continue;
+        }
+
+        this.logger.error(`Gagal menghubungi OpenAI Vision (Attempt ${attempt + 1}): ${error.message}`);
+        if (attempt >= maxRetries) throw error;
+      }
     }
+
+    return '';
   }
 
   /**
