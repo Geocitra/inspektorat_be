@@ -96,6 +96,8 @@ export class AssignmentController {
       new Date(dto.tanggalMulai),
       new Date(dto.tanggalSelesai),
       dto.fokusAudit,
+      dto.agendaAuditId,
+      dto.pelaksana,
     );
   }
 

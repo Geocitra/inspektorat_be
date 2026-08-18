@@ -37,6 +37,7 @@ export class DocumentIngestionController {
     @UploadedFile(FileSignatureValidationPipe) file: any,
     @Body('type') type: DocumentType,
     @Body('title') title: string,
+    @Body('opdId') opdId?: string,
   ) {
     if (!type || !title) {
       throw new BadRequestException('Parameter type (DocumentType) dan title wajib diisi.');
@@ -49,7 +50,7 @@ export class DocumentIngestionController {
     }
 
     // Mendelegasikan tugas ke Service untuk disimpan secara I/O Async dan masuk antrean
-    const jobResult = await this.ingestionService.queueDocumentForIngestion(file, type, title);
+    const jobResult = await this.ingestionService.queueDocumentForIngestion(file, type, title, opdId);
 
     return {
       success: true,
@@ -59,12 +60,12 @@ export class DocumentIngestionController {
   }
 
   /**
-   * Endpoint untuk mengambil seluruh daftar dokumen di Knowledge Base
+   * Endpoint untuk mengambil daftar dokumen di Knowledge Base (opsional filter per OPD)
    */
   @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll() {
-    const documents = await this.ingestionService.findAllDocuments();
+  async findAll(@Query('opdId') opdId?: string) {
+    const documents = await this.ingestionService.findAllDocuments(opdId);
     return {
       success: true,
       message: 'Berhasil mengambil daftar dokumen Knowledge Base.',
@@ -101,6 +102,19 @@ export class DocumentIngestionController {
           filePath: r.document.filePath,
         },
       })),
+    };
+  }
+
+  /**
+   * Endpoint untuk memeriksa status pekerjaan BullMQ (RAG ingestion)
+   */
+  @Get('job/:id')
+  @HttpCode(HttpStatus.OK)
+  async getJobStatus(@Param('id') id: string) {
+    const jobStatus = await this.ingestionService.getJobStatus(id);
+    return {
+      success: true,
+      data: jobStatus,
     };
   }
 

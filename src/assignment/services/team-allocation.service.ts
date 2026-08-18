@@ -14,11 +14,36 @@ export class TeamAllocationService {
 
   /**
    * Merekomendasikan susunan tim auditor yang optimal (PJ, KT, AT) bebas dari konflik jadwal
+   * Mengintegrasikan unit pelaksana (Irban) dari agenda PKPT resmi.
    */
-  async recommendTeam(startDate: Date, endDate: Date, fokusAudit: string) {
+  async recommendTeam(
+    startDate: Date, 
+    endDate: Date, 
+    fokusAudit: string,
+    agendaAuditId?: string | null,
+    pelaksanaOverride?: string | null,
+  ) {
     this.logger.log(`Mencari rekomendasi tim auditor bebas konflik untuk rentang ${startDate.toISOString()} s.d ${endDate.toISOString()}...`);
 
-    // 1. Ambil semua auditor bebas tugas
+    // 1. Dapatkan konteks agenda PKPT jika dihubungkan
+    let targetPelaksana = pelaksanaOverride || '';
+    let areaPengawasan = '';
+    let alokasiHp = null;
+
+    if (agendaAuditId) {
+      const agenda = await this.prisma.trAgendaAudit.findUnique({
+        where: { id: agendaAuditId },
+        include: { opd: true, pkpt: true },
+      });
+      if (agenda) {
+        const sub = (agenda.substansiDokumen as any) || {};
+        targetPelaksana = targetPelaksana || sub.pelaksana || '';
+        areaPengawasan = sub.areaPengawasan || agenda.jenisPengawasan || '';
+        alokasiHp = sub.hariPemeriksaan || null;
+      }
+    }
+
+    // 2. Ambil semua auditor bebas tugas (tidak sedang aktif di ST lain)
     const availableAuditors = await this.assignmentService.getAvailableAuditors(startDate, endDate);
     if (availableAuditors.length < 3) {
       throw new BadRequestException(
@@ -26,33 +51,39 @@ export class TeamAllocationService {
       );
     }
 
-    // 2. Beri skor kecocokan kompetensi/keahlian secara deterministik (Audit Skill Matcher)
+    // 3. Beri skor kecocokan kompetensi & unit pelaksana Irban (Smart Staffing Matcher)
     const scoredAuditors = availableAuditors.map((auditor) => {
       let score = 0.5; // base score
-      const focusLower = fokusAudit.toLowerCase();
+      const focusLower = `${fokusAudit} ${areaPengawasan}`.toLowerCase();
       const namaLower = auditor.nama.toLowerCase();
       const jabLower = (auditor.jabatan || '').toLowerCase();
+      const pelaksanaLower = targetPelaksana.toLowerCase();
 
-      // Heuristik pencocokan kompetensi sederhana
-      if (focusLower.includes('keuangan') || focusLower.includes('anggaran')) {
+      // Bobot Unit Irban: jika auditor bertugas di Irban yang sama
+      if (pelaksanaLower && jabLower.includes(pelaksanaLower)) {
+        score += 0.25;
+      }
+
+      // Heuristik pencocokan kompetensi bidang
+      if (focusLower.includes('keuangan') || focusLower.includes('anggaran') || focusLower.includes('bos')) {
         if (jabLower.includes('akuntan') || jabLower.includes('keuangan') || jabLower.includes('auditor')) {
-          score += 0.3;
-        }
-      }
-      if (focusLower.includes('fisik') || focusLower.includes('konstruksi') || focusLower.includes('pbj')) {
-        if (jabLower.includes('teknik') || jabLower.includes('sipil') || jabLower.includes('ppupd')) {
-          score += 0.3;
-        }
-      }
-      if (focusLower.includes('kinerja') || focusLower.includes('evaluasi')) {
-        if (jabLower.includes('ahli madya') || jabLower.includes('muda')) {
           score += 0.2;
         }
       }
+      if (focusLower.includes('fisik') || focusLower.includes('konstruksi') || focusLower.includes('pbj') || focusLower.includes('jalan')) {
+        if (jabLower.includes('teknik') || jabLower.includes('sipil') || jabLower.includes('ppupd')) {
+          score += 0.2;
+        }
+      }
+      if (focusLower.includes('kinerja') || focusLower.includes('evaluasi') || focusLower.includes('probity')) {
+        if (jabLower.includes('ahli madya') || jabLower.includes('muda') || jabLower.includes('investigasi')) {
+          score += 0.15;
+        }
+      }
 
-      // Stabilitas sorting menggunakan hash nilai string agar konsisten dalam verifikasi E2E
+      // Stabilitas sorting menggunakan hash deterministik
       const hashValue = (auditor.nama.charCodeAt(0) + (auditor.jabatan || '').charCodeAt(0)) % 100;
-      score += hashValue / 1000; // menambahkan bias desimal kecil 0.00 s.d 0.09
+      score += hashValue / 1000;
 
       return {
         ...auditor,
@@ -63,10 +94,7 @@ export class TeamAllocationService {
     // Urutkan auditor berdasarkan skor tertinggi
     scoredAuditors.sort((a, b) => b.score - a.score);
 
-    // 3. Petakan Peran Tim (PJ, KT, AT)
-    // - PJ (Pengawas Teknis): Peringkat 1
-    // - KT (Ketua Tim): Peringkat 2
-    // - AT (Anggota Tim): Sisa auditor peringkat 3 ke bawah
+    // 4. Petakan Peran Tim (PJ/Dalnis, KT, AT)
     const pj = scoredAuditors[0];
     const kt = scoredAuditors[1];
     const ats = scoredAuditors.slice(2);
@@ -77,27 +105,29 @@ export class TeamAllocationService {
         nama: pj.nama,
         jabatan: pj.jabatan,
         peranDalamTim: 'Pengawas_Teknis',
-        score: pj.score,
+        score: Number(pj.score.toFixed(2)),
       },
       {
         auditorId: kt.id,
         nama: kt.nama,
         jabatan: kt.jabatan,
         peranDalamTim: 'Ketua_Tim',
-        score: kt.score,
+        score: Number(kt.score.toFixed(2)),
       },
       ...ats.map((at) => ({
         auditorId: at.id,
         nama: at.nama,
         jabatan: at.jabatan,
         peranDalamTim: 'Anggota_Tim',
-        score: at.score,
+        score: Number(at.score.toFixed(2)),
       })),
     ];
 
-    this.logger.log(`Berhasil merekomendasikan tim berisi ${team.length} auditor.`);
+    this.logger.log(`Berhasil merekomendasikan tim (${targetPelaksana || 'APIP Umum'}) berisi ${team.length} auditor.`);
     return {
       fokusAudit,
+      unitPelaksana: targetPelaksana || 'Tim Gabungan APIP',
+      alokasiHariPemeriksaan: alokasiHp,
       periodePenugasan: {
         mulai: startDate,
         selesai: endDate,

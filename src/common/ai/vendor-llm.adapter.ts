@@ -60,6 +60,44 @@ export class VendorLlmAdapter {
   }
 
   /**
+   * Mengirim permintaan multimodal ke OpenAI (Vision) menggunakan gambar base64
+   */
+  async callLlmVision(
+    prompt: string,
+    base64Image: string,
+    options?: { model?: string; temperature?: number },
+  ): Promise<string> {
+    const model = options?.model || 'gpt-4o-mini'; // Model multimodal standard murah & kuat
+    const temperature = options?.temperature ?? 0;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Image}`,
+                },
+              },
+            ],
+          },
+        ],
+        temperature,
+      });
+
+      return response.choices[0]?.message?.content || '';
+    } catch (error: any) {
+      this.logger.error(`Gagal menghubungi OpenAI Vision: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Memulihkan string JSON yang tidak lengkap/rusak menggunakan jsonrepair
    */
   private healJson(jsonString: string): string {

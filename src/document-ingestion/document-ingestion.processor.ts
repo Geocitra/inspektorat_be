@@ -19,6 +19,7 @@ export interface IngestionJobData {
     originalName: string;
     fileSize: number;
     hash: string;
+    opdId?: string | null;
 }
 
 @Processor('document_ingestion')
@@ -45,23 +46,33 @@ export class DocumentIngestionProcessor extends WorkerHost {
             originalName,
             fileSize,
             hash,
+            opdId,
         } = job.data;
 
         this.logger.log(`[Job ${job.id}] Memulai pemrosesan AI Ingestion untuk dokumen: ${originalName}`);
 
         try {
-            const buffer = await fsPromises.readFile(filePath);
+            let rawText = '';
+            try {
+                const buffer = await fsPromises.readFile(filePath);
 
-            const ext = originalName.split('.').pop()?.toLowerCase() || '';
-            const parser = this.parserFactory.getParser(mimeType, ext);
+                const ext = originalName.split('.').pop()?.toLowerCase() || '';
+                const parser = this.parserFactory.getParser(mimeType, ext);
 
-            this.logger.log(`[Job ${job.id}] Mengekstrak teks menggunakan parser (.${ext})...`);
-            const rawText = await parser.parse(buffer);
+                this.logger.log(`[Job ${job.id}] Mengekstrak teks menggunakan parser (.${ext})...`);
+                rawText = await parser.parse(buffer);
+            } catch (parseError: any) {
+                this.logger.error(`[Job ${job.id}] GAGAL mengekstrak teks (Permanent Error): ${parseError.message}`);
+                await job.discard(); // Hentikan retries
+                throw parseError;
+            }
 
             const cleanedText = this.sanitizerPipeline.sanitize(rawText);
 
             const chunks = this.chunkerService.chunkText(cleanedText);
             if (chunks.length === 0) {
+                this.logger.error(`[Job ${job.id}] GAGAL memproses (Permanent Error): Dokumen tidak mengandung teks atau non-OCR.`);
+                await job.discard(); // Hentikan retries
                 throw new Error('Dokumen tidak mengandung teks yang dapat diekstrak atau dokumen berupa hasil scan (non-OCR).');
             }
             this.logger.log(`[Job ${job.id}] Berhasil memecah teks menjadi ${chunks.length} chunks.`);
@@ -82,6 +93,7 @@ export class DocumentIngestionProcessor extends WorkerHost {
                     type,
                     filePath: dbRelativePath,
                     status: 'AKTIF',
+                    opdId: opdId || undefined,
                 },
                 {
                     fileSize,

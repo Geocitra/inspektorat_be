@@ -62,6 +62,16 @@ export const RecommendTeamSchema = z.object({
     .string({ required_error: 'Fokus audit wajib diisi untuk pencocokan kompetensi' })
     .min(3, 'Fokus audit minimal 3 karakter')
     .max(500),
+  agendaAuditId: z
+    .string()
+    .uuid('Format Agenda Audit ID tidak valid')
+    .optional()
+    .nullable(),
+  pelaksana: z
+    .string()
+    .max(100)
+    .optional()
+    .nullable(),
 }).refine((data) => Date.parse(data.tanggalSelesai) >= Date.parse(data.tanggalMulai), {
   message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
   path: ['tanggalSelesai'],

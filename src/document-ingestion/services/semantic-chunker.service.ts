@@ -10,63 +10,124 @@ export class SemanticChunkerService {
   chunkText(text: string, targetSize = 2000, overlapPercent = 12): string[] {
     if (!text) return [];
 
-    const overlapSize = Math.floor(targetSize * (overlapPercent / 100));
+    const lines = text.split(/\n/);
+    const items: Array<{ type: 'text' | 'table'; content: string; header?: string }> = [];
     
-    // Split berdasarkan paragraf terlebih dahulu untuk menjaga koherensi
-    const paragraphs = text.split(/\n+/);
-    const sentences: string[] = [];
+    let isInsideTable = false;
+    let currentTableRows: string[] = [];
 
-    // Jika paragraf terlalu besar atau untuk pemotongan lebih detail, kita pecah menjadi kalimat
-    for (const paragraph of paragraphs) {
-      if (paragraph.trim() === '') continue;
-      
-      // Split ke kalimat menggunakan regex yang mempertahankan tanda baca kalimat akhir
-      const paragraphSentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [paragraph];
-      for (const sentence of paragraphSentences) {
-        const trimmed = sentence.trim();
-        if (trimmed !== '') {
-          sentences.push(trimmed);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      const isTableRow = trimmedLine.startsWith('|') && trimmedLine.endsWith('|');
+
+      if (isTableRow) {
+        if (!isInsideTable) {
+          isInsideTable = true;
+          currentTableRows = [line];
+        } else {
+          currentTableRows.push(line);
+        }
+      } else {
+        if (isInsideTable) {
+          // Tabel selesai. Simpan data tabel
+          const header = currentTableRows.slice(0, 2).join('\n');
+          items.push({
+            type: 'table',
+            content: currentTableRows.join('\n'),
+            header,
+          });
+          currentTableRows = [];
+          isInsideTable = false;
+        }
+        
+        if (trimmedLine !== '') {
+          items.push({ type: 'text', content: line });
         }
       }
     }
 
+    // Tangani tabel sisa di akhir teks
+    if (isInsideTable && currentTableRows.length > 0) {
+      const header = currentTableRows.slice(0, 2).join('\n');
+      items.push({
+        type: 'table',
+        content: currentTableRows.join('\n'),
+        header,
+      });
+    }
+
+    // Mulai pembuatan chunks
     const chunks: string[] = [];
-    let currentChunk: string[] = [];
-    let currentLength = 0;
+    let currentChunkText = '';
 
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i];
-      currentChunk.push(sentence);
-      currentLength += sentence.length + 1; // +1 untuk spasi
-
-      // Jika ukuran chunk saat ini sudah melampaui target
-      if (currentLength >= targetSize) {
-        chunks.push(currentChunk.join(' '));
+    for (const item of items) {
+      if (item.type === 'text') {
+        const paragraph = item.content;
         
-        // Cari titik overlap: mundur dari belakang kalimat untuk mendapatkan teks overlap ~240 karakter
-        let overlapLength = 0;
-        const overlapSentences: string[] = [];
-        
-        for (let j = currentChunk.length - 1; j >= 0; j--) {
-          const s = currentChunk[j];
-          if (overlapLength + s.length > overlapSize) {
-            break;
+        if (currentChunkText.length + paragraph.length + 1 > targetSize) {
+          if (currentChunkText.trim().length > 0) {
+            chunks.push(currentChunkText.trim());
           }
-          overlapSentences.unshift(s);
-          overlapLength += s.length + 1;
+          
+          // Jika satu paragraf melampaui targetSize, pecah berdasarkan kalimat
+          if (paragraph.length > targetSize) {
+            const sentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [paragraph];
+            let tempText = '';
+            for (const sentence of sentences) {
+              if (tempText.length + sentence.length + 1 > targetSize) {
+                chunks.push(tempText.trim());
+                tempText = sentence;
+              } else {
+                tempText += (tempText ? ' ' : '') + sentence.trim();
+              }
+            }
+            currentChunkText = tempText;
+          } else {
+            currentChunkText = paragraph;
+          }
+        } else {
+          currentChunkText += (currentChunkText ? '\n' : '') + paragraph;
         }
+      } else {
+        // Penanganan tabel
+        const tableContent = item.content;
+        const header = item.header || '';
+        
+        if (currentChunkText.length + tableContent.length + 1 > targetSize) {
+          if (currentChunkText.trim().length > 0) {
+            chunks.push(currentChunkText.trim());
+            currentChunkText = '';
+          }
 
-        currentChunk = [...overlapSentences];
-        currentLength = overlapLength;
+          // Jika tabel sangat panjang melampaui targetSize, pecah barisnya
+          if (tableContent.length > targetSize) {
+            const rows = tableContent.split('\n');
+            const tableHeaderLines = rows.slice(0, 2);
+            let tempTableText = tableHeaderLines.join('\n');
+
+            for (let j = 2; j < rows.length; j++) {
+              const row = rows[j];
+              if (tempTableText.length + row.length + 1 > targetSize) {
+                chunks.push(tempTableText.trim());
+                // Suntikkan header tabel ke chunk lanjutan berikutnya
+                tempTableText = tableHeaderLines.join('\n') + '\n' + row;
+              } else {
+                tempTableText += '\n' + row;
+              }
+            }
+            currentChunkText = tempTableText;
+          } else {
+            currentChunkText = tableContent;
+          }
+        } else {
+          currentChunkText += (currentChunkText ? '\n' : '') + tableContent;
+        }
       }
     }
 
-    // Tambahkan sisa chunk terakhir jika ada
-    if (currentChunk.length > 0 && currentLength > 0) {
-      const remainingText = currentChunk.join(' ').trim();
-      if (remainingText.length > 10) {
-        chunks.push(remainingText);
-      }
+    if (currentChunkText.trim().length > 0) {
+      chunks.push(currentChunkText.trim());
     }
 
     return chunks;

@@ -1,0 +1,593 @@
+
+--- Lembar Kerja (Sheet): Table 1 ---
+PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO | PROGRAM KERJA PENGAWASAN TAHUNAN (PKPT) BERBASIS RISIKO
+INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA | INSPEKTORAT DAERAH KAB/KOTA
+TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025 | TAHUN 2025
+NO | AREA PENGAWASAN | PERANGKAT DAERAH | JENIS PENGAWASAN | TUJUAN/SASARAN | RUANG LINGKUP | PELAKS ANA | JADWAL | JADWAL | HP | HP | HP | HP | HP | HP | ANGGARAN | JUM LAP | SARANA DAN PRASARANA | TINGKAT RISIKO | KET
+NO | AREA PENGAWASAN | PERANGKAT DAERAH | JENIS PENGAWASAN | TUJUAN/SASARAN | RUANG LINGKUP | PELAKS ANA | RMP | RPL | PJ | WK
+PJ | Dalnis | KT | AT | JUM | ANGGARAN | JUM LAP | SARANA DAN PRASARANA | TINGKAT RISIKO | KET
+-1 | -2 | -3 | -4 | -5 | -6 | -6 | -7 | -7 | -7 | -7 | -7 | -7 | -8 | -9 | -10 | -11
+ASSURANCE
+AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT
+1 | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban 1 | TW I
+Program Pencegahan, Penanggulangan, Penyelamatan Kebakaran Dan Penyelamatan Non Kebakaran | Dinas Pemadam Kebakaran dan Penyelamatan | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban 1 | TW I | TW I | 1 | 1 | 10 | 10 | 30 | 52 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+1. Program Pengelolaan Persampahan
+2. Program Pengendalian Pencemaran dan/atau Kerusakan Lingkungan Hidup | Dinas Lingkungan Hidup | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban 1 | TW I | TW I | 1 | 1 | 10 | 10 | 60 | 82 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+DBMSDA | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban 2 | TW I | TW I | 1 | 1 | 15 | 45 | 180 | 242 | 3 | 1. Kendaraan
+2. Laptop
+3. ATK
+4. Printer
+5. Alat Ukur | Tinggi
+DISPERKIMTAN | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban 2 | TW I | TW I | 1 | 1 | 15 | 45 | 180 | 242 | 3 | 1. Kendaraan
+2. Laptop
+3. ATK
+4. Printer
+5. Alat Ukur | Tinggi
+Program Pengelolaan Pendidikan | Dinas Pendidikan | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban 3 | TW I | TW I | 1 | 1 | 10 | 20 | 100 | 132 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Tinggi
+Dinas Kesehatan | Audit Tujuan Tertentu Kegiatan Bantuan Keuangan Provinsi DKI-Jakarta | 1.Pelaksanaan kegiatan yang bersumber dari Bantuan Keuangan Provinsi DKI Jakarta telah dilaksanakan sesuai aturan dan ketentuan;
+2.Prosedur pengadaan barang dan jasa yang bersumber dari Bantuan Keuangan Pemerintah Provinsi DKI Jakarta pada Peraturan Pengadaan Barang dan Jasa telah dipenuhi;
+3.Kuantitas dan Kualitas Barang dan Jasa yang diperoleh melalui proses pengadaan barang dan jasa dapat dipertanggungjawabkan serta diserahterimakan sesuai aturan;
+4.Pembayaran kegiatan telah sesuai berdasarkan Progres Pekerjaan Hasil Pemeriksaan. | Kegiatan Yang Bersumber Bantuan Keuangan Provinsi DKI Jakarta T.A. 2024 (Murni) dibatasi pada Belanja Barang dan Jasa dan Belanja Modal | Irban Investiga si | TW I | TW I | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4
+2 | Progam Pemenuhan Upaya Kesehatan Perorangan dan Upaya Kesehatan Masyarakat | RSUD | Audit Ketaatan Pengadaan Barang dan Jasa (MCP-KPK 2025) | Untuk memperoleh keyakinan bahwa proses pengadaan dilakukan dengan cara yang adil, terbuka, transparan, dan berdasarkan pada prinsip-prinsip etika dan integritas yang tinggi | Perencanaan s.d Pelaksanaan Pengadaan | Irban 1 | TW III | TW III | 1 | 1 | 15 | 15 | 165 | 195 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+Program   Pemenuhan   Upaya Kesehatan    Perorangan    dan Upaya Kesehatan Masyarakat, Program    Sediaan    Farmasi, Alat  Kesehatan  Dan  Makanan Minuman     pada     Perangkat Daerah DINKES | DINKES | Audit Ketaatan Pengadaan Barang dan Jasa (MCP-KPK 2025) | Memberikan  keyakinan  memadai atas  (PBJ-Alkes,  Obat,  Peralatan Mesin,           Mebelair,           Jasa Konsultansi)  telah  sesuai  dengan ketentuan. | Perencanaan s.d Pelaksanaan Pengadaan | Irban 2 | TW IV | TW IV | 1 | 1 | 15 | 30 | 195 | 242 | 1 | 1. Kendaraan
+2. Laptop;
+3. ATK;
+4. Printer | Tinggi
+Program Penyelenggaraan Lalu Lintas dan Angkutan Jalan (LLAJ) | DISHUB | Audit Ketaatan Pengadaan Barang dan Jasa (MCP-KPK 2025) | Untuk memperoleh keyakinan bahwa proses pengadaan dilakukan dengan cara yang adil, terbuka, transparan, dan berdasarkan pada prinsip-prinsip etika dan integritas yang tinggi | Perencanaan Pengadaan Halte | Irban 3 | TW II | TW II | 1 | 1 | 15 | 15 | 75 | 107 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Tinggi
+3 | DINKES | Probity Audit (MCP-KPK 2025) | Untuk memastikan bahwa proses pengadaan dilakukan dengan cara yang adil, terbuka, transparan, dan berdasarkan pada prinsip-prinsip etika dan integritas yang tinggi | Tahap Perencanaan dan Persiapan | Irban 1 | TW I | TW I | 1 | 1 | 20 | 20 | 80 | 122 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+DISPERKIMTAN, DBMSDA (KONFIR DGN IRBAN 2) | Probity Audit (MCP-KPK 2025) | Untuk memastikan bahwa proses pengadaan dilakukan dengan cara yang adil, terbuka, transparan, dan berdasarkan pada prinsip-prinsip etika dan integritas yang tinggi | Tahap :
+1. Perencanaan
+2. Persiapan
+3. Pemilihan Penyedia
+4. Penyusunan Kontrak
+5. Pelaksanaan Pekerjaan
+6. Serah Terima | Irban 2 | TW II | TW II | 1 | 1 | 15 | 15 | 105 | 137 | 1 | 1. Kendaraan
+2. Laptop;
+3. ATK;
+4. Printer;
+5. Alat ukur | Tinggi
+Tahap Perencanaan dan Persiapan | Irban 2 | TW II | TW II | 1 | 1 | 15 | 15 | 105 | 137 | 1 | 1. Kendaraan
+2. Laptop;
+3. ATK;
+4. Printer;
+5. Alat ukur | Tinggi
+Tahap Perencanaan dan Persiapan | Irban 2 | TW II | TW II | 1 | 1 | 15 | 15 | 105 | 137 | 1 | 1. Kendaraan
+2. Laptop;
+3. ATK;
+4. Printer;
+5. Alat ukur | Tinggi
+DISDIK | Tahap Perencanaan dan Persiapan | Irban 3
+4 | 1. Program Rehabilitasi Sosial
+2. Program Pemberdayaan dan Peningkatan Keluarga Sejahtera (KS)
+3. Program Perumahan dan Kawasan Permukiman Kumuh
+4. Program pemenuhan upaya kesehatan perorangan dan upaya kesehatan masyarakat
+5. Program pemberdayaan masyarakat bidang kesehatan | 1. Dinsos
+2. Dinkes
+3. Disperkimtan
+4. DPPKB | Audit Kinerja Stunting (MCP-KPK 2025) | Untuk memberikan nilai tambah dan masukan/saran perbaikan kepada manajemen terkait  perbaikan kinerja untuk mengurangi/ menghilangkan/ memulihkan dampak permasalahan, dan perbaikan Governance Risk  Compliance (GRC) atas aspek ekonomis, efisiensi, dan efektivitas (3E) serta aspek ketaatan terhadap ketentuan yang berlaku | Penurunan Stunting | Irban 1
+Irban 2
+Irban 3 (Gabung an)
+REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU
+All Program | 44 Perangkat Daerah | Reviu Laporan Keuangan Pemda | Untuk memberikan keyakinan terbatas bahwa Laporan Keuangan SKPD disusun berdasarkan Sistem Pengendalian Intern (SPI) yang memadai dan disajikan sesuai dengan Standar Akuntansi Pemerintahan (SAP). | Identifikasi permasalahan-permasalahan dalam penyusunan Laporan Keuangan Pemerintah Daerah serta penilaian terbatas terhadap keandalan SPI atas penyelenggaraan akuntansi dan Laporan Keuangan Perangkat Daerah, termasuk penelaahan atas catatan akuntansi serta dokumen sumber yang diperlukan dan kesesuaian dengan SAP | Irban 1 | 1 | 1
+Irban 2
+Irban 3 | TW I | TW I | 1 | 1 | 5 | 5 | 55 | 67 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+1 | All Program | 44 Perangkat Daerah | Reviu Laporan Keuangan PD | Untuk memberikan keyakinan terbatas bahwa Laporan Keuangan SKPD disusun berdasarkan Sistem Pengendalian Intern (SPI) yang memadai dan disajikan sesuai dengan Standar Akuntansi Pemerintahan (SAP). | Identifikasi permasalahan-permasalahan dalam penyusunan Laporan Keuangan Pemerintah Daerah serta penilaian terbatas terhadap keandalan SPI atas penyelenggaraan akuntansi dan Laporan Keuangan Perangkat Daerah, termasuk penelaahan atas catatan akuntansi serta dokumen sumber yang diperlukan dan kesesuaian dengan SAP | Irban 1 | TW I | TW I | 1 | 1 | 5 | 5 | 65 | 77
+Irban 2 | TW I | TW I | 1 | 1 | 4 | 16 | 44 | 66 | 15 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+Irban 3 | TW III | TW III | 1 | 1 | 5 | 5 | 55 | 67 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+2 | All Program | 44 Perangkat Daerah | Reviu RKA Berbasis SIPD (e-
+Reviu) 2026 (MANDATORI) | a. Memberi keyakinan terbatas mengenai akurasi, keandalan dan keabsahan informasi RKA SKPD Tahun 2026 sesuai dengan dokumen perencanaan Pemerintah Daerah dan Perangkat Daerah;
+b. Memberi keyakinan terbatas atas kesesuaian dengan standar biaya dan kaidah-kaidah penganggaran;
+c. Memberi keyakinan terbatas atas dokumen pendukung  RKA SKPD Tahun 2026. | a. Kesesuaian Konsistensi Indikator Target Kinerja antara RKA, KUA PPAS dan RKPD;
+b. Kesesuaian Konsistensi Pagu Anggaran antara RKA, KUA PPAS dan RKPD;
+c. Kesesuaian Konsistensi Rincian Belanja RKA dengan KUA PPAS;
+d. Kesesuaian Target Kinerja dan Indikator;
+e. Pengujian Detail Akun Anggaran;
+f. Kesesuaian Besaran Anggaran Pendapatan dan Belanja dalam  RKA-SKPD TA 2026 dengan  KUA PPAS TA 2026;
+g. Kesesuaian Rincian Belanja dalam  RKA-SKPD TA 2026 dengan Standar Biaya dan Kaidah-Kaidah Penganggaran
+h. Kelayakan Anggaran untuk Menghasilkan Suatu Keluaran (Output) Kegiatan Telah Memperhatikan Asas Kepatutan dalam Pengalokasian Anggaran Disesuaikan dengan Prioritas Pembangunan Daerah | Irban 1 | TW IV | TW IV | 1 | 1 | 7 | 7 | 84 | 100
+All Program | 44 Perangkat Daerah | Reviu RKA Berbasis SIPD (e-
+Reviu) 2026 (MANDATORI) | a. Memberi keyakinan terbatas mengenai akurasi, keandalan dan keabsahan informasi RKA SKPD Tahun 2026 sesuai dengan dokumen perencanaan Pemerintah Daerah dan Perangkat Daerah;
+b. Memberi keyakinan terbatas atas kesesuaian dengan standar biaya dan kaidah-kaidah penganggaran;
+c. Memberi keyakinan terbatas atas dokumen pendukung  RKA SKPD Tahun 2026. | a. Kesesuaian Konsistensi Indikator Target Kinerja antara RKA, KUA PPAS dan RKPD;
+b. Kesesuaian Konsistensi Pagu Anggaran antara RKA, KUA PPAS dan RKPD;
+c. Kesesuaian Konsistensi Rincian Belanja RKA dengan KUA PPAS;
+d. Kesesuaian Target Kinerja dan Indikator;
+e. Pengujian Detail Akun Anggaran;
+f. Kesesuaian Besaran Anggaran Pendapatan dan Belanja dalam  RKA-SKPD TA 2026 dengan  KUA PPAS TA 2026;
+g. Kesesuaian Rincian Belanja dalam  RKA-SKPD TA 2026 dengan Standar Biaya dan Kaidah-Kaidah Penganggaran
+h. Kelayakan Anggaran untuk Menghasilkan Suatu Keluaran (Output) Kegiatan Telah Memperhatikan Asas Kepatutan dalam Pengalokasian Anggaran Disesuaikan dengan Prioritas Pembangunan Daerah | Irban 2 | TW IV | TW IV | 1 | 1 | 7 | 7 | 84 | 100 | 15 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+All Program | 44 Perangkat Daerah | Reviu RKA Berbasis SIPD (e-
+Reviu) 2026 (MANDATORI) | a. Memberi keyakinan terbatas mengenai akurasi, keandalan dan keabsahan informasi RKA SKPD Tahun 2026 sesuai dengan dokumen perencanaan Pemerintah Daerah dan Perangkat Daerah;
+b. Memberi keyakinan terbatas atas kesesuaian dengan standar biaya dan kaidah-kaidah penganggaran;
+c. Memberi keyakinan terbatas atas dokumen pendukung  RKA SKPD Tahun 2026. | a. Kesesuaian Konsistensi Indikator Target Kinerja antara RKA, KUA PPAS dan RKPD;
+b. Kesesuaian Konsistensi Pagu Anggaran antara RKA, KUA PPAS dan RKPD;
+c. Kesesuaian Konsistensi Rincian Belanja RKA dengan KUA PPAS;
+d. Kesesuaian Target Kinerja dan Indikator;
+e. Pengujian Detail Akun Anggaran;
+f. Kesesuaian Besaran Anggaran Pendapatan dan Belanja dalam  RKA-SKPD TA 2026 dengan  KUA PPAS TA 2026;
+g. Kesesuaian Rincian Belanja dalam  RKA-SKPD TA 2026 dengan Standar Biaya dan Kaidah-Kaidah Penganggaran
+h. Kelayakan Anggaran untuk Menghasilkan Suatu Keluaran (Output) Kegiatan Telah Memperhatikan Asas Kepatutan dalam Pengalokasian Anggaran Disesuaikan dengan Prioritas Pembangunan Daerah | Irban 3 | TW IV | TW IV | 1 | 1 | 7 | 7 | 77 | 93 | 14 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+3 | All Program | 44 Perangkat Daerah | Reviu RKA Perubahan 2025 (MANDATORI) | memberikan keyakinan terbatas bahwa Perubahan RKA-SKPD TA 2025 telah disusun sesuai dengan ketentuan, standar, rencana atau norma guna meningkatkan kualitas dokumen perencanaan pembangunan dan penganggaran daerah. | Berdasarkan surat Kepala Badan Pengelolaan Keuangan dan Aset Daerah Kota Bekasi | Irban 1 | TW IV | TW IV | 1 | 1 | 7 | 7 | 84 | 100
+All Program | 44 Perangkat Daerah | Reviu RKA Perubahan 2025 (MANDATORI) | memberikan keyakinan terbatas bahwa Perubahan RKA-SKPD TA 2025 telah disusun sesuai dengan ketentuan, standar, rencana atau norma guna meningkatkan kualitas dokumen perencanaan pembangunan dan penganggaran daerah. | Berdasarkan surat Kepala Badan Pengelolaan Keuangan dan Aset Daerah Kota Bekasi | Irban 2 | TW III | TW III | 1 | 1 | 7 | 7 | 84 | 100 | 15 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+All Program | 44 Perangkat Daerah | Reviu RKA Perubahan 2025 (MANDATORI) | memberikan keyakinan terbatas bahwa Perubahan RKA-SKPD TA 2025 telah disusun sesuai dengan ketentuan, standar, rencana atau norma guna meningkatkan kualitas dokumen perencanaan pembangunan dan penganggaran daerah. | Berdasarkan surat Kepala Badan Pengelolaan Keuangan dan Aset Daerah Kota Bekasi | Irban 3 | TW IV | TW IV | 1 | 1 | 7 | 7 | 77 | 93 | 14 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+4 | Reviu DAK Fisik dan Non Fisik
+(MANDATORI) | 1. Memberikan keyakinan terbatas mengenai keandalan dan keabsahan laporan;
+2. memberikan keyakinan terbatas  bahwa dana yang dialokasikan telah digunakan sesuai dengan tujuannya.
+3. Memperoleh data yang akurat mengenai realisasi penyerapan dana dan capaian output. | Laporan realisasi penyerapan dana dan capaian output kegiatan.
+Program Pemenuhan Upaya Kesehatan Perorangan dan Upaya Kesehatan Masyarakat | RSUD | Irban 1 | TW III | TW III | 1 | 1 | 5 | 5 | 20 | 32 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+Program    yang    dilaksanakan Bersumber   Dana    DAK   Fisik
+T.A          2025          (DINKES, DISPERKIMTAN ); | DISPERKIMTAN, DINKES | Irban 2 | TW I | TW I | 1 | 1 | 6 | 6 | 39 | 53 | 3 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+Program    yang    dilaksanakan Bersumber   Dana    DAK   Fisik
+T.A   2025   (DISPERKIMTAN,
+DINKES dan PD Lingkup Irban II yang memperoleh DAK Fisik Tahun 2025); | DISPERKIMTAN, DINKES | Irban 2 | TW III | TW III | 1 | 1 | 6 | 6 | 39 | 53 | 3 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+Program    yang    dilaksanakan Bersumber   Dana    DAK   Fisik
+T.A   2025   (DISPERKIMTAN,
+DINKES dan PD Lingkup Irban
+II  yang memperoleh DAK Fisik Tahun 2025); | DISPERKIMTAN, DINKES | Irban 2 | TW III | TW III | 1 | 1 | 6 | 6 | 39 | 53 | 3 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+Program    yang    dilaksanakan Bersumber   Dana    DAK   Fisik
+T.A   2025   (DISPERKIMTAN,
+DINKES dan PD Lingkup Irban
+II  yang memperoleh DAK Fisik Tahun 2025); | DISPERKIMTAN, DINKES | Irban 2 | TW IV | TW IV | 1 | 1 | 6 | 6 | 39 | 53 | 3 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+5 | Program Pengelolaan Pendidikan | Reviu DAK Fisik | Irban 3 | TW I | TW I | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+TW II | TW II | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+TW III | TW III | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+TW IV | TW IV | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+6 | Program Pendidik dan Tenaga Kependidikan | Reviu Non fisik | Irban 3 | TW I | TW I | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+TW II | TW II | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+TW III | TW III | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+TW IV | TW IV | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+7 | Program Perekonomian dan Pembangunan | Reviu Tim Evaluasi Percepatan Realisasi Anggaran (TEPRA) Triwulan I TA 2025
+(MANDATORI) | untuk meningkatkan kualitas pengelolaan anggaran dan memastikan kepatuhan terhadap peraturan yang berlaku. | Penyerapan Anggaran per Triwulan | Tim Gabung an ( Danis, Diana, Iman, Ananda, Nusa, Herlyn Syahrul) | TW I | TW I | 1 | 1 | 5 | 5 | 30 | 42 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+8 | Program Perekonomian dan Pembangunan | Reviu Tim Evaluasi Percepatan Realisasi Anggaran (TEPRA) Triwulan II TA 2025
+(MANDATORI) | TW II | TW II | 1 | 1 | 5 | 5 | 30 | 42 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+9 | Program Perekonomian dan Pembangunan | Reviu Tim Evaluasi Percepatan Realisasi Anggaran (TEPRA) Triwulan III TA 2025
+(MANDATORI) | TW III | TW III | 1 | 1 | 5 | 5 | 30 | 42 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+10 | Program Perekonomian dan Pembangunan | Reviu Tim Evaluasi Percepatan Realisasi Anggaran (TEPRA) Triwulan IV TA 2025
+(MANDATORI) | TW IV | TW IV | 1 | 1 | 5 | 5 | 30 | 42 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI
+All Program | 44 Perangkat Daerah | Evaluasi RR dan MR OPD 2025
+(MANDATORI) | a. memperoleh gambaran pelaksanaan penerapan Manajemen Risiko Perangkat Daerah;
+b. memberikan umpan balik untuk peningkatan pencapaian tujuan dan manfaat penerapan manajemen risiko. | Mengevaluasi Risk Register Perangkat Daerah atas Program Penunjang Urusan dan Program Urusan | Irban 1 | TW IV | TW IV | 1 | 1 | 5 | 5 | 60 | 72 | 44 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+All Program | 44 Perangkat Daerah | a. memperoleh gambaran pelaksanaan penerapan Manajemen Risiko Perangkat Daerah;
+b. memberikan umpan balik untuk peningkatan pencapaian tujuan dan manfaat penerapan manajemen risiko. | Mengevaluasi Risk Register Perangkat Daerah atas Program Penunjang Urusan dan Program Urusan | Irban 2 | TW I | TW I | 1 | 1 | 5 | 5 | 60 | 72 | 44 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+All Program | 44 Perangkat Daerah | a. memperoleh gambaran pelaksanaan penerapan Manajemen Risiko Perangkat Daerah;
+b. memberikan umpan balik untuk peningkatan pencapaian tujuan dan manfaat penerapan manajemen risiko. | Mengevaluasi Risk Register Perangkat Daerah atas Program Penunjang Urusan dan Program Urusan | Irban 3 | TW I | TW I | 1 | 1 | 5 | 5 | 60 | 72 | 44 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+All Program | 44 Perangkat Daerah | Evaluasi RR dan MR OPD 2026
+(MANDATORI) | a. memperoleh gambaran pelaksanaan penerapan Manajemen Risiko Perangkat Daerah;
+b. memberikan umpan balik untuk peningkatan pencapaian tujuan dan manfaat penerapan manajemen risiko. | Mengevaluasi Risk Register Perangkat Daerah atas Program Penunjang Urusan dan Program Urusan | Irban 1 | TW IV | TW IV | 1 | 1 | 5 | 5 | 60 | 72 | 44 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+All Program | 44 Perangkat Daerah | Mengevaluasi Risk Register Perangkat Daerah atas Program Penunjang Urusan dan Program Urusan | Irban 2 | TW IV | TW IV | 1 | 1 | 5 | 5 | 60 | 72 | 44 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+All Program | 44 Perangkat Daerah | Mengevaluasi Risk Register Perangkat Daerah atas Program Penunjang Urusan dan Program Urusan | Irban 3 | TW IV | TW IV | 1 | 1 | 5 | 5 | 60 | 72 | 44 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+Evaluasi MR dan SPBE 2025 (MANDATORI) | Irban 1 | TW II | TW II
+Irban 2 | TW II | TW II
+Irban 3 | TW II | TW II
+Evaluasi Risk Register Korupsi Perencanaan Pembangunan Daerah | seluruh jafung | 15 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Evaluasi Risk Register Proses Verifikasi Pokir sampai dengan Terakomodir Pokir APBD | seluruh jafung | 15 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Evaluasi Risk Register Proses Penyaluran Bantuan Hibah, dan Bantuan Sosial dan Bantuan Keuangan | seluruh jafung | 15 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Evaluasi Risk Register Korupsi Penyusunan dan Implementasi SHS dan ASB | seluruh jafung | 15 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Evaluasi Risk Register Korupsi pada Proses Pengasahan APBD murni dan Perubahan | seluruh jafung | 15 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Evaluasi Risk Register pada proses Pengadaan Barang dan Jasa | seluruh jafung | 15 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Evaluasi Risk Register dalam Pelaksanaan PBJ Strategis | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Korupsi dalam proses Pelaksanaan PBJ melalui E-Purchasing | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Korupsi dalam proses Penerbitan Rekomendasi Teknis dan Perizininan | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Korupsi dalam Penerimaan Peserta Didik Baru | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Korupsi dalam Pemberian Layanan Kesehatan pada Masyarakat | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Korupsi dalam proses Kependudukan dan Pencatatan Sipil Kepada Masyarakat | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Perencanaan Pengawasan Berbasis Resiko termasuk Fraud | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Proses Pengelolaan BMD | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+Evaluasi Risk Register Optimalisasi Pajak | TW II | TW II | 1 | 1 | 25 | 25 | 115 | 167
+MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING
+Program Penunjang Urusan Pemerintahan Daerah Kabupaten/Kota | 44 Perangkat Daerah | Monitoring Persediaan Barang Pakai Habis Semester I TA 2025 | Penatausahaan dan pelaporan Persediaan pada Perangkat Daerah telah didukung dokumen yang memadai | Kesesuaian fisik persediaan dengan data stock persediaan yang tercatat pada Laporan Persediaan TA. 2025 | Irban 1 | TW II | TW II | 1 | 1 | 3 | 3 | 36 | 44 | 14 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Rendah
+Irban 2 | TW IV | TW IV | 1 | 1 | 2 | 8 | 22 | 34 | 15 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+Irban 3 | TW II | TW II | 1 | 1 | 3 | 3 | 33 | 41 | 14 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Rendah
+Monitoring Persediaan Barang Pakai Habis Semester II TA 2025 | Irban 1 | TW IV | TW IV | 1 | 1 | 3 | 3 | 36 | 44 | 14 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Rendah
+Irban 2 | TW IV | TW IV | 1 | 1 | 2 | 8 | 22 | 34 | 15 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+Irban 3 | TW IV | TW IV | 1 | 1 | 3 | 3 | 33 | 41 | 14 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Rendah
+All Program | 44 Perangkat Daerah | Monitoring Temuan Pengawasan Internal | Untuk memantau temuan internal yang ditindaklanjuti | Temuan Internal | Irban 1 | TW I | TW I | 1 | 1 | 3 | 3 | 36 | 44
+TW II | TW II | 1 | 1 | 3 | 3 | 36 | 44
+TW III | TW III | 1 | 1 | 3 | 3 | 36 | 44
+TW IV | TW IV | 1 | 1 | 3 | 3 | 36 | 44
+Irban 2 | TW I | TW I
+TW II | TW II | 1 | 1 | 7 | 7 | 52 | 68 | 1 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+TW III | TW III | 1 | 1 | 7 | 7 | 52 | 68 | 1 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+TW IV | TW IV | 1 | 1 | 7 | 7 | 52 | 68 | 1 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+Irban 3 | TW I | TW I
+TW II | TW II
+TW III | TW III
+TW IV | TW IV
+IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I | IRBAN I
+AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT
+Program Penyelenggaraan Penataan Ruang | Dinas Tata Ruang | Audit Ketaatan atas Program Penyelenggaraan
+Penataan Ruang | a. Terselesaikannya rencana tata ruang daerah
+b.  Terlaksananya pengendalian pemanfaatan ruang | 1) Jumlah materi teknis RTRW Kabupaten/Kota yang diberikan rekomendasi dalam rangka persetujuan subtansi;
+2) Jumlah rancangan Perda RTRW Kabupaten/Kota yang dilakukan evaluasi dalam rangka pentapan Perda;
+3) Jumlah Kasus pelanggaran pemanfaatan ruang yang dikenakan sanksi administrarif;
+4) Jumlah laporan kebutuhan PPNS Penataan Ruang di Daerah | Irban 1 | TW IV | TW IV | 1 | 1 | 15 | 15 | 75 | 107 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+Program  Peningkatan  Sarana Distribusi Perdagangan | Disdagperin | Audit Ketaatan | Untuk keyakinan yang memadai atas pelaksanaan program | 1. Program Peningkatan Sarana Distribusi Perdagangan
+2. Program Perencanaan dan Pembangunan Industri
+3. Program Stabilisasi Harga Barang Kebutuhan Pokok Dan Barang Penting | Irban 1 | TW IV | TW IV | 1 | 1 | 15 | 15 | 60 | 92 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Progam      Stabilitas      Harga Barang  Kebutuhan  Pokok  dan Penting | Disdagperin | Audit Ketaatan | Untuk keyakinan yang memadai atas pelaksanaan program | 1. Program Peningkatan Sarana Distribusi Perdagangan
+2. Program Perencanaan dan Pembangunan Industri
+3. Program Stabilisasi Harga Barang Kebutuhan Pokok Dan Barang Penting | Irban 1 | TW IV | TW IV | 1 | 1 | 15 | 15 | 60 | 92 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Progam Penunjang Urusan Pemerintahan Daerah Kabupaten/Kota | DISDAMKARMAT | ADTT Perjalanan Dinas (MCP-KPK 2025) | untuk keyakinan yang memadai bahwa pelaksanaan perjalanan dinas telah sesuai dengan aturan dan ketentuan yang berlaku | dibatasi pada Pelaksanaan dan Pertanggungjawaban Perjalanan Dinas Dalam dan Luar Daerah | Irban 1 | TW IV | TW IV | 1 | 1 | 20 | 20 | 100 | 142 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+1. Program Pengelolaan Pendapatan Daerah
+2. Program Pengelolaan Sampah
+3. Program Peningkatan Sarana Distribusi
+Perdagangan | 1. Bapenda
+2. Dinas LH
+3. Disdagperin | Audit Ketaatan/ADTT Kebocoran Penerimaan Daerah (MCP-KPK 2025) | Untuk memberikan keyakinan bahwa pengelolaan penerimaan daerah telah sesuai dengan ketentuan | 1. Pajak Daerah
+2. Retribusi Daerah | Irban 1 | TW III | TW III | 1 | 1 | 30 | 60 | 160 | 250 | 1. Laptop
+2. Printer
+3. Kertas
+Program Pengelolaa Sampah | Dinas LH | ADTT atas Pengelolaan Retribusi Sampah (MCP-KPK 2025) | Untuk memberikan keyakinan bahwa pengelolaan retribusi sampah telah sesuai dengan ketentuan. | Pengelolaan Retribusi Sampah | Irban 1 | TW I | TW I | 1 | 1 | 15 | 15 | 150 | 180 | 1. Laptop
+2. Printer
+3. Kertas
+Progam kepegawaian Daerah | BKPSDM | Irban 1 | TW III | TW III | 1 | 1 | 15 | 15 | 105 | 135 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+Program Pengelolaan Aplikasi Informatika | 1. Diskominfostandi
+2. PD (sampel aplikasi) | 1. Audit Infrastruktur SPBE
+2. Audit Aplikasi SPBE
+3. Audit Keamanan SPBE | 1. untuk memperoleh dan mengevaluasi bukti secara objektif terhadap Infrastruktur Infrastruktur Sistem Penghubung Layanan Pemerintah (SPLP) Aplikasi untuk menetapkan tingkat kesesuaian antara TIK dengan kriteria dan/atau standar yang telah ditetapkan;
+2. untuk memastikan penerapan (nama aplikasi) serta kesuaian dengan Peta Rencana SPBE dan Ketetapan Aplikasi (nama aplikasi) sebagai aplikasi, serta standar teknis lainnya sesuai Perpres 95 2018 tentang SPBE;
+3. untuk menilai tingkat kesesuaian antara teknologi informasi dan komunikasi dengan kriteria yang telah ditetapkan. | 1. Infrastruktur SPBE
+2. Aplikasi SPBE
+3. Keamanan SPBE | Irban 1 | TW II | TW II | 1 | 1 | 30 | 30 | 100 | 160 | 1. Laptop
+2. Printer
+3. Kertas
+Progam Penunjang Urusan Pemerintahan Daerah Kabupaten/Kota | 1. Kec. Pondok Gede
+2. Kec. Pondok Melati | Audit  Ketaatan | untuk memberikan keyakinan bahwa | Infrastruktur | Irban 1 | TW IV | TW IV | 1 | 1 | 15 | 30 | 150 | 197 | 1. Laptop
+2. Printer
+3. Kertas
+REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU
+1 | Program Pengelolaan Pendapatan Daerah | Bapenda | Reviu Pendapatan dalam rangka Optimalisasi Tindak Lanjut Temuan Berulang pada Pemeriksaan BPK RI atas LKPD Kota Bekasi | Untuk keyakinan terbatas atas upaya yang dilakukan Perangkat Daerah untuk meminimalisasi temuan beruang | 1. Penatausahaan Piutang PBB-P2
+2. Pengendalian Pengelolaan Pajak Daerah | Irban 1 | TW I | TW I | 1 | 1 | 15 | 15 | 25 | 57 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+Program Pengelolaan Pendapatan Daerah | Bapenda | Reviu Optimalisasi Pajak Daerah (MCP-KPK 2025) | Untuk memberikan keyakinan terbatas bahwa pelaksanaan Optimalisasi Pajak Daerah pada Badan Pendapatan Daerah Kota Bekasi telah sesuai dengan aturan dan ketentuan pengelolaan pendapatan yang berlaku sehingga dapat meningkatkan kualitas mekanisme pengelolaan pendapatan dalam mewujudkan tata kelola  kepemerintahan yang baik. | a. Kebijakan/ regulasi yang mendorong optimalisasi pajak dan retribusi daerah.
+b. Penguatan database pajak dan retribusi daerah
+c. Inovasi dan peningkatan pajak dan retribusi daerah.
+d. Upaya penagihan pajak dan retribusi daerah.
+e. Pengawasan dan Pemeriksaan Wajib Pajak. | Irban 1 | TW III | TW III | 1 | 1 | 15 | 15 | 25 | 57 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+3 | Program Kepegawaian Daerah | BKPSDM | Reviu Pelaksanaan Rekrutmen, Promosi dan Mutasi ASN (MCP-KPK 2025) | Untuk memberikan keyakinan terbatas atas kesesuaian Proses Promosi dan Mutasi/Rotasi ASN dengan Norma, Standar, Prosedur, Kriteria dan Peraturan perundang-undangan. | a. Pelaksanaan rekrutmen ASN berdasarkan kebutuhan dan kualifikasi yang telah ditentukan.
+b. Pelaksanaan promosi dan mutasi ASN telah sesuai berdasarkan pertimbangan yang memadai.
+c. Pelaksanaan rekrutmen, promosi, dan mutasi ASN sesuai dengan ketentuan yang berlaku (tahapan, administrasi, substansi).
+d. Pelaksanaan promosi dan mutasi telah mempertimbangkan
+kinerja, kepatuhan LHKPN, tidak terlibat perkara korupsi, dan pertimbangan lain yang relevan.
+e. Pengaduan masyarakat pada pelaksanaan rekrutmen, promosi, dan mutasi ASN (jika ada) beserta tindak lanjutnya. | Irban 1 | TW III | TW III | 1 | 1 | 15 | 15 | 75 | 107 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Tinggi
+5 | Program Pelayanan Penanaman
+Modal | DPMPTSP | Reviu Kinerja Pelayanan Publik pada Sektor Perizinan (termasuk rekomendasi teknis) (MCP-KPK 2025) | a. Keyakinan terbatas atas Kinerja Pelayanan Publik pada Sektor Perizinan (termasuk rekomendasi teknis) telah sesuai dengan ketentuan yang berlaku;.
+b. Keyakinan terbatas bahwa Perangkat Daerah telah melaksanakan Implementasi pelayanan terpadu satu pintu dalam pemberian layanan publik sektor perizinan (termasuk rekomendasi teknis);
+c. Keyakinan terbatas atas  upaya dan/ atau inovasi yang telah dilakukan  untuk menurunkan risiko penyuapan/ gratifikasi/ pemerasan dalam layanan publik sektor perizinan
+Memberikan saran dan rekomendasi kepada Dinas Penanaman Modal dan Pelayanan Terpadu Satu Pintu Kota Bekasi terhadap pelaksanaan Kinerja Perizinan (termasuk rekomendasi teknis). | a.  Kelengkapan regulasi dan kebijakan (Perkada, SK Kada, SOP
+Perizinan Terintegrasi, SOP Rekomendasi Teknis) yang mendorong layanan publik sektor perizinan (termasuk rekomendasi teknis).
+b. b. Implementasi pelayanan terpadu satu pintu dalam pemberian layanan publik sektor perizinan.
+c. Adanya Pakta Integritas layanan publik sektor perizinan (termasuk rekomendasi teknis)  termasuk upaya dan/ atau inovasi untuk menurunkan risiko penyuapan/ gratifikasi/ pemerasan dalam layanan publik sektor perizinan (termasuk rekomendasi teknis).
+d. Adanya aplikasi layanan publik sektor perizinan (termasuk rekomendasi teknis) penggunaan aplikasi layanan publik sektor perizinan (termasuk rekomendasi teknis) dalam melaksanakan layanan publik sektor perizinan (termasuk rekomendasi teknis).
+e. Kelengkapan sarana dan prasarana termasuk profesionalisme sumber daya manusia pelaksana pelayanan publik sektor perizinan (termasuk rekomendasi teknis).
+f. Adanya Service Level Agreement (SLA) terhadap pelaksanaan perizinan (termasuk rekomendasi teknis) dan ketepatan waktu pelaksanaan layanan publik sektor perizinan (termasuk rekomendasi teknis) berdasarkan SLA.
+g. Adanya kanal pengaduan untuk menyampaikan saran/ masukan/ keluhan terkait layanan publik sektor perizinan (termasuk rekomendasi teknis) serta tindak lanjut atas penanganan layanan publik sektor perizinan (termasuk rekomendasi teknis), termasuk status penanganan pengaduan.
+h. Adanya target kinerja yang memperhatikan SLA dan penyelesaian pengaduan masyarakat termasuk pemberian sanksi terhadap pelaku penyuapan/ gratifikasi/ pemerasan layanan publik sektor perizinan (termasuk rekomendasi teknis). | Irban 1 | TW II | TW II | 1 | 1 | 15 | 15 | 120 | 152 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II | IRBAN II
+AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT
+Program        yang        terdapat anggaran Honor | BAPPELITBANGDA | ADTT Honorarium | Memberikan  keyakinan  memadai atas     Belanja     Honor     sesuai dengan  ketentuan,  penilaian  SPI dan mengidentifkasi fiktif | Tata Kelola Pertanggunga jawaban | Irban 2 | TW I | TW I | 1 | 1 | 15 | 45 | 180 | 242 | 3 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer;
+5. Alat Ukur | Tinggi
+Program yang melaksanakan Pekerjaan Fisik Konstruksi | DISPERKIMTAN, DBMSDA | ADDT atas Kualitas dan Kuantitas Pekerjaan | Memberikan      keyakanin      yang memadai  terhadap  kuanttas  dan kualitas   pekerjaan   telah   sesuai kontrak  da  memberikan  penilain terhadap SPI dan mengidentfikasi fraud. | kuantitas dan kualitas pekerjaan konstruksi | Irban 2 | TW I
+dan IV | TW I
+dan IV | 1 | 1 | 15 | 30 | 195 | 242 | 2 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer;
+5. Alat Ukur | Tinggi
+Program    Penunjang    Urusan Pemerintahan                Daerah Kabupaten/Kota,         Program Peningkatan       Ketenteraman Dan Ketertiban Umum | SATPOL PP | Audit Ketaatan atas Belanja-SPPD | Memberikan  keyakinan  memadai atas     Belanja     SPPD     sesuai dengan  ketentuan,  penilaian  SPI dan mengidentifkasi fiktif | Tata Kelola Pertanggungajaban | Irban 2 | TW III | TW III | 1 | 1 | 15 | 30 | 195 | 242 | 2 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+Program   Pemenuhan   Upaya Kesehatan    Perorangan    dan Upaya Kesehatan Masyarakat, Program    Sediaan    Farmasi, Alat  Kesehatan  Dan  Makanan Minuman | DINKES | Audit Ketaatan Pengadaan Barang Alkes/Obat, Peralatan Mesin | Memberikan  keyakinan  memadai atas  (PBJ-Alkes,  Obat,  Peralatan Mesin,           Mebelair,           Jasa Konsultansi)  telah  sesuai  dengan ketentuan. | Perencanaan s.d Pelaksanaan Pengadaan | Irban 2 | TW IV | TW IV | 1 | 1 | 15 | 30 | 195 | 242 | 1 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Tinggi
+Program Menyesuaikan Program pada Audit Kinerja Stunting | DINKES | Audit Kinerja | Cakupan kepemilikan dokumen perangkat daerah untuk pelaksanaan program dan kegiatan TA 2025 | Meliputi seluruh aktivitas kegiatan perencanaan, penganggaran, pelaksanaan, pelaporan dan pertanggungjawaban sesuai dengan tupoksi perangkat daerah | Irban 2 | TW II | TW III | 1 | 1 | 15 | 30 | 195 | 242 | 1 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Tinggi
+Program Menyesuaikan Pelaksanaan ADTT pada Perangkat Daerah yang di Audit | Audit dengan Tujuan Tertentu | Memberikan  keyakinan  memadai atas  pelaksanaan  kegiatan  (tata kelola  keuangan/tata  kelola  aset dll)       telah       sesuai       dengan ketentuan. | Menyesuaiakan | Irban 2 | TW I | TW I | 1 | 1 | 15 | 30 | 195 | 242 | 4 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer;
+5. Alat Ukur | Tinggi
+REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU
+Program PROGRAM PEMBERDAYAAN SOSIAL, PROGRAM PERLINDUNGAN DAN JAMINAN SOSIAL pada
+DINSOS (yakni lagi apakah di Investigas) | DINSOS | Reviu Hibah & Bansos | Tujuan              reviu           adalah memberikan   keyakinan   terbatas bahwa                    penganggaran, pelaksanaan dan penatausahaan, pelaporan                                 dan
+pertanggungjawaban,            serta monitoring   dan   evaluasi   hibah dan      bantuan      sosial      yang bersumber        dari        Anggaran Pendapatan  dan  Belanja  Daerah telah        dilaksanakan        sesuai ketentuan. | Ruang lingkup reviu ini meliputi penganggaran, pelaksanaan dan penatausahaan, pelaporan dan pertanggungjawaban serta monitoring dan evaluasi pemberian hibah dan bantuan sosial pada APBD. | Irban 2 | TW III | TW III | 1 | 1 | 4 | 8 | 52 | 66 | 1 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+Program yang ada di Perangkat Daerah Lingkup Pengawasan Irban II Menyesuaikan pada saat
+pelaksanaan Reviu P3DN | Reviu P3DN Semester I | Tujuan:
+Menilai      kepatuhan      terhadap peraturan    P3DN    dan    potensi fraud  terkait realisasi P3DN. | Ruang  lingkup  kegiatan  adalah  peningkatan  Penggunaan  Produk  Dalam  Negeri pada Pemerintah Daerah Kota Bekasi meliputi:
+1) Analisis kebijakan pemerintah daerah baik dari sisi supply, demand, dan market yang mendorong P3DN;
+2)    Analisis     komitmen     dan     realisasi     belanja     pemerintah     daerah     yang | Irban 2 | TW III | TW III | 1 | 1 | 6 | 6 | 42 | 56 | 1 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+Program yang ada di Perangkat Daerah Lingkup Pengawasan Irban II Menyesuaikan pada saat pelaksanaan Reviu P3DN | Reviu P3DN Semester II | Sasaran:
+a.      Mendapatkan       keyakinan terbatas     atas     realisasi     PDN dan  TKDN;
+b.          Meyakinkan         ketaatan implementasi    kebijakan    P3DN yang    terkait    dengan    realisasi komitmen P3DN;
+c.  Mengidentifikasi  potensi  fraud dalam    implementasi    kebijakan P3DN;
+d.     Memberikan      rekomendasi atas                         penyimpangan implementasi                   kebijakan Pemerintah terkait P3DN;
+e.      Memberikan      rekomendasi untuk      mendorong      efektivitas keberhasilan P3DN;
+f.     Menilai     hasil     tindaklanjut rekomendasi/saran     atas     hasil reviu P3DN sebelumnya. | dialokasikan untuk P3DN;
+3) Analisis kepatuhan pemerintah daerah dalam implementasi P3DN.
+b. Data komitmen dan realisasi penggunaan produk dalam negeri pada PBJ yang direviu merupakan tanggung jawab manajemen pemerintah daerah. | Irban 2 | TW IV | TW IV | 1 | 1 | 6 | 6 | 42 | 56 | 1 | 1. Kendaraan
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING
+Semua Program yang ada di Perangkat Daerah Lingkup Pengawasan Irban II | Monitoring P3DN | Tujuan    monitoring    peningkatan penggunaan produk dalam negeri pada   Pemerintah   Kota   Bekasi adalah   untuk   menginformasikan komitmen    penggunaan    produk dalam negeri dan realisasi belanja dalam   pengadaaan   barang   dan jasa pemerintah daerah | Ruang lingkup monitoring meliputi:
+a. Komitmen pemerintah daerah dalam penggunaan produk dalam negeri.
+b. Realisasi pengadaan barang dan jasa pemerintah daerah.
+c. Data komitmen dan realisasi belanja penggunaan produk dalam negeri pada PBJ yang dimonitor merupakan tanggung jawab pemerintah daerah dan monitoring tidak termasuk proses PBJ yang dilakukan pemerintah daerah. | Irban 2 | TW I | TW IV | 1 | 1 | 3 | 3 | 12 | 20 | 12 | 1. Kendaraan;
+2. Laptop;
+3. ATK;
+4. Printer | Sedang
+PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA
+Semua     Program     ada     di Perangkat    Daerah    Lingkup Pengawasan Irban II | Pendampingan/Asistensi MR | Memberikan           pendampingan kepada  OPD  sejauh  mana  telah mengidentifikasi,       menganalisis dan mengelola risiko - risiko | Ruang  lingkup  evaluasi  yaitu  pengujian  kewajaran  pernyataan  risiko,  penilaian risiko serta rencana tindak pengendalian yang dibuat oleh perangkat daerah. | TW III | TW III | 1 | 1 | 2 | 8 | 22 | 34 | 15 | 1. Laptop;
+2. ATK;
+3. Printer | Sedang
+IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III | IRBAN III
+AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT
+Program Penunjang Urusan Pemerintah Daerah Kabupaten/Kota | ADTT Penyalahgunaan BMD | Meyakini bahwa BMD telah digunakn sesuai dengan ketentuan | Penyalahgunaan BMD | Irban 3 | TW I | TW I | 1 | 1 | 15 | 15 | 75 | 107 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Tinggi
+Program Perekonomian dan Pembangunan | Audit Ketaatan BUMD | Memberi keyakinan pengelolaan BUMD telah sesuai dengan ketentuan | Pengelolaan BUMD | Irban 3 | TW III | TW III | 1 | 1 | 20 | 20 | 100 | 142 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Sedang
+Program Dukungan Pelaksanaan Tugas dan Fungsi DPRD | Audit Ketaatan Belanja Perjalanan Dinas | Memberi keyakinan belanja perjalanan dinas telah sesuai dengan ketentuan | Belanja Perjalanan Dinas | Irban 3 | TW III | TW III | 1 | 1 | 20 | 20 | 100 | 142 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Tinggi
+REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU
+Program Pengelolan Barang Milik Daerah | Reviu SSH T+1 | Memberi keyakinan terbatas bhwa SSH yang telah sesuai dengan ketentuan | SSH | Irban 3 | TW III | TW III | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+Program Perekonomian dan Pembangunan | Reviu ASB T+1 | Memberi keyakinan terbatas bahwa penyusunan ASB telah memperhatikan SSH | - ASB | Irban 3 | TW III | TW III | 1 | 1 | 5 | 5 | 25 | 37 | 1 | 1. Laptop
+2. Printer
+3. Kertas | Sedang
+Program Penunjang Urusan Pemerintah Daerah Kabupaten/Kota | Reviu Pengelolaan BMD | Memperoleh gambaran pengelolaan BMD pada Pemerintah Kota Bekasi | Temuan Berulang Aset | Irban 3 | TW I | TW I | 1 | 1 | 10 | 10 | 50 | 72 | 1 | 1. Laptop
+2. Printer
+3. Kertas
+4. Kendaraan
+roda 4 | Tinggi
+PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD | PPUPD
+REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU | REVIU
+All Program | 44 Perangkat Daerah | Evaluasi Maturitas MR 2025 | a. memperoleh gambaran pelaksanaan penerapan Manajemen Risiko Perangkat Daerah;
+b. memberikan umpan balik untuk peningkatan pencapaian tujuan dan manfaat penerapan
+manajemen risiko. | Menilai Tingkat Maturitas/Kematangan Manajemen Risiko Perangkat Daerah. | PPUPD | 23 Jun | 30 Jun | 1 | 1 | 1 | 1 | 19 | 23
+Reviu Laporan Kinerja Perangkat Daerah Tahun 2024 | PPUPD | 15 Jan | 21 Jan | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu Laporan Kinerja Kota Bekasi TA.2024 | PPUPD | 3 Jan | 7 Jan | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu LPPD TA.2024 | PPUPD | 22 Jan | 31 Jan | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu Rencana Kinerja TA.2026 | PPUPD | 19 May | 27 May | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu RKPD TA.2026 | PPUPD | 7 May | 16 May | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu KUA-PPAS Tahun 2026 | PPUPD | 9 June | 13 Jun | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu RKPD Perubahan TA.2026 | PPUPD | 16 Jun | 20 Jun | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu KUA-PPAS Perubahan | PPUPD | 21 July | 25 July | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu Rencana Kerja Perubahan 2025 | PPUPD | 4 Agst | 8 Agst | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu RPJMD | PPUPD | 26 May | 30 May | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Reviu Renstra | PPUPD | 2 June | 5 June | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Pelayanan Publik : | PPUPD | 1 | 1 | 1 | 1 | 19 | 23
+Reviu PPDB | PPUPD | 9 June | 13 Jun | 1
+Reviu layanan Perizinan berdasarkan Risiko Tertinggi | PPUPD | 27 Okt | 31 Okt
+Reviu Layanan RSUD berdasarka Risiko Tertinggi | PPUPD | 6 Okt | 10 Okt
+Reviu Layanan kependudukan berdasarkan resiko tertinggi | PPUPD
+Reviu Kerjasama (Inflasi) | PPUPD | 2 July | 4 July | 1 | 1 | 1 | 1 | 19 | 23
+Reviu Manajemen ASN (Rotasi mutasi) | PPUPD | 1 | 1 | 1 | 1 | 19 | 23
+Reviu Pencegahan Korupsi Program Makanan Bergizi Sehat - Dana APBD | PPUPD | 20 Okt | 24 Okt | 1 | 1 | 1 | 1 | 19 | 23
+EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI
+Risk Register Korupsi Perencanaan Pembangunan Daerah | PPUPD
+Risk Register Proses Verifikasi Pokir sampai dengan Terakomodir Pokir
+APBD | PPUPD
+Risk Register Korupsi pada Proses Pengasahan APBD murni dan Perubahan | PPUPD
+Risk Register Korupsi dalam Penerimaan Peserta Didik Baru | PPUPD
+Risk Register Korupsi dalam Pemberian Layanan Kesehatan pada Masyarakat | PPUPD
+Evaluasi Reformasi Birokrasi Tingkat Kota : | PPUPD | 1 | 1 | 1 | 1 | 19 | 23
+tahap pelaksanaan (ongoing) tw 4 2024 | PPUPD | 8 Jan | 14 Jan
+tahap perencanaan (exante) 2025 | PPUPD | 10 Mar | 18 Mar
+tahap pelaksanaan (ongoing) tw 1 2025 | PPUPD | 19 May | 27 May
+tahap pelaksanaan (ongoing) tw 2 2025 | PPUPD | 18 Agst | 26 Agst
+tahap pelaksanaan (ongoing) tw 3 2025 | PPUPD | 17 Nov | 25 Nov
+Evaluasi Zona Integritas | PPUPD | 21 April | 30 April | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Evaluasi SAKIP | PPUPD | 14 July | 29 July | 1 | 1 | 1 | 1 | 19 | 23
+Evaluasi SPIP | PPUPD | 7 July | 11 July | 1 | 1 | 1 | 1 | 19 | 23
+Evaluasi MR | PPUPD | 23 Jun | 30 Jun | 1 | 1 | 1 | 1 | 19 | 23 | 1
+MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING | MONITORING
+Monitoring LHKPN | PPUPD | 2 Jan | 7 Jan | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Monitoring Pengendalian Gratifikasi | PPUPD | 22 Des | 24 Des | 1 | 1 | 1 | 1 | 19 | 23 | 2
+Monitoring Pelaporan Rencana Aksi Daerah Pencegahan dan Pemberantasan Korupsi | PPUPD | 3 Mar | 7 Mar | 1 | 1 | 1 | 1 | 19 | 23 | 4
+Monitoring Pelaporan Rencana Aksi Daerah Pencegahan dan Pemberantasan Korupsi | PPUPD | 2 June | 6 June | 4
+Monitoring Pelaporan Rencana Aksi Daerah Pencegahan dan Pemberantasan Korupsi | PPUPD | 1 Okt | 4 Okt | 4
+Monitoring Pelaporan Rencana Aksi Daerah Pencegahan dan Pemberantasan Korupsi | PPUPD | 29 Des | 31 Des | 4
+Monitoring P3K : | PPUPD | 1 | 1 | 1 | 1 | 8 | 12
+Pengumuman hasil seleksi administrasi | PPUPD | 4 Feb | 18 Feb
+Pelaksanaan seleksi kompetensi | PPUPD | 17 April | 16 May
+Pengumuman hasil kelulusan | PPUPD | 22 May | 31 May
+PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN | PENGAWASAN
+Pengawasan atau Capaian SPM Trantibum | Irban UPD | 3 Nov | 14 Nov | 1 | 1 | 1 | 3 | 18 | 24 | 1
+Pemeriksaan, Pengawasan Urusan Pangan, Perikanan dan Pertanian | Irban UPD | 15 Sep | 26 Sep | 1 | 1 | 1 | 1 | 19 | 23 | 1
+Kerja Sama Daerah (Pengendalian Inflasi Daerah serta Kerja Sama Pemerintah dan Badan Usaha | Irban UPD
+Kepegawaian pada Perangkat Daerah (Rekrutmen ASN) | Irban UPD
+INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI | INVESTIGASI
+AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT | AUDIT
+Penyalahgunaan Keuangan Daerah | Mengungkap fakta-fakta terkait indikasi penyimpangan keuangan, serta bertujuan mendukung upaya pemulihan kerugian negara melalui langkah administratif melalui rekomendasi perbaikan sistem tata kelola keuangan | Ruang lingkup meliputi penelusuran dokumen keuangan dan analisis data transaksi yang relevan, serta pengumpulan informasi melalui wawancara pihak terkait, serta mencakup penghitungan kerugian yang timbul dan identifikasi kelemahan dalam sistem pengelolaan keuangan daerah. | Irban Investiga si | 1 | Tinggi
+PDTT atas Hibah Terbesar | Memastikan bahwa dana hibah telah dikelola secara transparan, akuntabel, dan sesuai dengan peraturan perundang-undangan, serta bertujuan untuk menilai efektivitas dan efisiensi penggunaan dana hibah pencapaian tujuan , mengidentifikasi potensi penyimpangan atau ketidaksesuaian, serta memberikan rekomendasi perbaikan peningkatan tata kelola dana hibah. | Mencakup Audit  terhadap proses perencanaan, pengalokasian, pelaksanaan, dan pelaporan penggunaan dana hibah, analisis kepatuhan terhadap ketentuan , verifikasi fisik
+, penilaian dampak pelaksanaan hibah terhadap penerima manfaat. serta mengidentifikasi potensi penyimpangan, | Irban Investiga si | 1 | Sedang
+PDTT atas Bantuan Sosial | Memastikan bahwa dana bantuan sosial telah dikelola secara efektif, efisien, transparan sesuai dengan ketentuan serta
+bertujuan menilai kesesuaian pelaksanaan dengan tujuan pemberian bantuan sosial, mengidentifikasi potensi penyimpangan atau ketidaktepatan sasaran, serta memberikan rekomendasi strategis untuk meningkatkan akuntabilitas dan optimalisasi pengelolaan dana bantuan sosial. | Mencakup audit terhadap proses perencanaan, pengalokasian, pelaksanaan, dan pertanggungjawaban penggunaan dana bantuan sosial terbesar.Audit mencakup identifikasi kelemahan dalam sistem distribusi, potensi penyimpangan penggunaan dana, serta penyusunan rekomendasi untuk memastikan pengelolaan bantuan sosial lebih transparan dan tepat sasaran. | Irban Investiga si
+EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI | EVALUASI
+N  I  H  I  L
+PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA | PENGAWASAN LAINNYA
+N  I  H  I  L
+SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI | SERTIFIKASI
+Certified Forensic Auditor (CFrA) | Untuk meningkatkan kompetensi, profesionalisme, dan kemampuan adaptasi peserta terhadap perubahan regulasi, teknologi, dan sistem kerja, bertujuan mendukung peningkatan kinerja organisasi  serta sebagai sarana penguatan tata kelola yang baik, pembentukan wawasan strategis, dan kepemimpinan yang efektif. Tujuan lainnya adalah mendukung pengembangan karir dan produktivitas dalam rangka pencapaian tujuan organisasi | 2 orang Investigasi
+a. Arif Firman Susanto, S.Sos.,
+M.S.E., CRP., CRMP.
+b. Suwartinin gsih, S.E.

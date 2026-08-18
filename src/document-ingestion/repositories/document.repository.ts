@@ -13,18 +13,20 @@ export class DocumentRepository {
    * Menyimpan dokumen, metadata, dan chunks dalam satu transaksi database atomik
    */
   async saveIngestedDocument(
-    document: { title: string; type: DocumentType; filePath: string; status?: DocumentStatus },
+    document: { title: string; type: DocumentType; filePath: string; status?: DocumentStatus; opdId?: string },
     metadata: { fileSize: number; mimeType: string; totalChunks: number; totalTokens?: number; hash: string },
     chunks: { chunkIndex: number; content: string; embedding: number[] }[],
   ) {
     return this.prisma.$transaction(async (tx) => {
       // 1. Simpan induk dokumen
+      const isUuid = document.opdId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(document.opdId) : false;
       const savedDoc = await tx.auditDocument.create({
         data: {
           title: document.title,
           type: document.type,
           filePath: document.filePath,
           status: document.status || DocumentStatus.DRAF,
+          opdId: isUuid ? document.opdId : null,
         },
       });
 
@@ -100,10 +102,39 @@ export class DocumentRepository {
         similarity: parseFloat(r.similarity) || 0.0,
         document: { id: r.documentId }
       }));
-    } catch (rawError) {
-      this.logger.warn(`pgvector tidak didukung atau belum dipasang di database. Menjalankan fallback keyword search.`);
-      // Fallback menggunakan keyword search
-      return this.searchKeyword('', limit);
+    } catch (rawError: any) {
+      this.logger.warn(`pgvector tidak didukung atau belum dipasang di database: ${rawError.message}. Menjalankan fallback in-memory cosine similarity search.`);
+      
+      try {
+        const allChunks = await this.prisma.docChunk.findMany({
+          where: {
+            document: {
+              status: DocumentStatus.AKTIF,
+            },
+          },
+          include: {
+            document: true,
+          },
+        });
+
+        const scoredChunks = allChunks.map((chunk) => {
+          const sim = this.cosineSimilarity(queryVector, chunk.embedding);
+          return {
+            id: chunk.id,
+            chunkIndex: chunk.chunkIndex,
+            content: chunk.content,
+            embedding: [],
+            similarity: sim,
+            document: chunk.document,
+          };
+        });
+
+        scoredChunks.sort((a, b) => b.similarity - a.similarity);
+        return scoredChunks.slice(0, limit);
+      } catch (fallbackError: any) {
+        this.logger.error(`Fallback search gagal: ${fallbackError.message}`);
+        return this.searchKeyword('', limit);
+      }
     }
   }
 

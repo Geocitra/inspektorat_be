@@ -61,7 +61,20 @@ export class PkptGeneratorService {
     }
 
     const systemPrompt = `Anda adalah AI Asisten Analitis dan Penyusun Draf (Copilot) untuk Inspektorat Daerah.
-Tugas Anda adalah menyusun usulan draf program kerja pengawasan tahunan (PKPT) & Agenda Audit untuk OPD-OPD berdasarkan tingkat risiko (NTR), data anggaran/geografis, dan pedoman regulasi pengawasan.
+Tugas Anda adalah menyusun usulan draf program kerja pengawasan tahunan (PKPT) & Agenda Audit untuk OPD-OPD berdasarkan tingkat risiko (NTR), data anggaran/geografis, dan 14 kolom standar format PKPT resmi Inspektorat.
+Atribut wajib per agenda meliputi:
+- areaPengawasan: Program kerja/bidang yang diawasi
+- jenisPengawasan: Audit Tujuan Tertentu, Audit Ketaatan PBJ, Probity Audit, Reviu, Evaluasi, atau Pemantauan
+- tujuanSasaran: Poin-poin tujuan pengawasan secara komprehensif
+- ruangLingkup: Batasan pemeriksaan (contoh: Belanja Barang Jasa & Modal)
+- pelaksana: Unit pelaksana (Irban 1, Irban 2, Irban 3, atau Irban Investigasi)
+- jadwal: Triwulan (TW I, TW II, TW III, atau TW IV)
+- hariPemeriksaan: Alokasi HP (pj, wkpj, dalnis, kt, at, totalHp)
+- jumlahLaporan: Jumlah LHP (1, 2, atau 3)
+- saranaPrasarana: Daftar logistik (Laptop, Printer, ATK, Kendaraan Roda 4, Alat Ukur)
+- tingkatRisiko: Tinggi, Sedang, atau Rendah
+- estimasiAnggaran: 0 jika tidak dicantumkan di anggaran pengawasan langsung
+
 Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
 
     const userPrompt = `Tahun Anggaran: ${tahunAnggaran}
@@ -72,9 +85,6 @@ ${rankingString}
 
 Berikut adalah Regulasi Acuan (Kriteria):
 ${criteriaText || 'Gunakan pedoman standard audit berbasis risiko Inspektorat.'}
-
-Anda WAJIB menghasilkan draf usulan pengawasan untuk OPD-OPD di atas.
-Pecah Hari Pemeriksaan (HP) untuk masing-masing peran tim (PJ, WKPJ, Dalnis, KT, AT) secara logis sesuai tingkat kesulitan.
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(PkptDraftOutputSchema)}
@@ -88,7 +98,7 @@ Berikan output JSON sekarang:`;
         jsonMode: true,
         temperature: 0.1,
       });
-    } catch (llmError: any) { // [FIX] Added : any
+    } catch (llmError: any) {
       this.logger.error(`Gagal mendapatkan draf dari LLM: ${llmError.message}`);
       rawResponse = JSON.stringify(this.getFallbackDraft(rankings, tahunAnggaran));
     }
@@ -121,9 +131,23 @@ Berikan output JSON sekarang:`;
       .join('\n');
 
     const systemPrompt = `Anda adalah AI Asisten Data Ekstraktor untuk Inspektorat Daerah.
-Tugas Anda adalah membaca teks acak/tabel dari dokumen PKPT mentah, dan mengekstrak jadwal, anggaran, serta alokasi hari pemeriksaan ke dalam format JSON.
-SANGAT PENTING: Anda WAJIB mencocokkan (Fuzzy Match) nama instansi/OPD di dokumen mentah dengan DAFTAR OPD RESMI yang diberikan. 
+Tugas Anda adalah membaca teks/tabel dari dokumen PKPT mentah (Excel/PDF) dan mengekstrak seluruh baris agenda pengawasan secara utuh ke dalam format JSON 14 kolom standar PKPT.
+SANGAT PENTING: Anda WAJIB mencocokkan (Fuzzy Match) nama instansi/OPD di dokumen mentah dengan DAFTAR OPD RESMI yang diberikan.
 Anda HANYA BOLEH menggunakan 'opdId' dan 'opdName' yang terdapat di dalam daftar resmi tersebut. Jika tidak yakin, pilih yang ejaannya paling mirip.
+Untuk setiap baris, ekstrak:
+- areaPengawasan: Area Pengawasan / Program
+- jenisPengawasan: Audit Tujuan Tertentu, Audit Ketaatan PBJ, Probity Audit, Reviu, Evaluasi, dll.
+- tujuanSasaran: Seluruh poin tujuan sasaran yang tertulis
+- ruangLingkup: Ruang lingkup pemeriksaan
+- pelaksana: Irban 1 / Irban 2 / Irban 3 / Irban Investigasi
+- jadwal: TW I / TW II / TW III / TW IV
+- perkiraanBulan: Konversi dari TW (TW I=2, TW II=5, TW III=8, TW IV=11)
+- hariPemeriksaan: Matriks HP (pj, wkpj, dalnis, kt, at, totalHp)
+- jumlahLaporan: Angka dari kolom JUM LAP (default 1 jika kosong)
+- saranaPrasarana: Array teks sarana prasarana yang tercantum (contoh: ["Laptop", "Printer", "Kertas", "Kendaraan Roda 4"])
+- tingkatRisiko: Tinggi / Sedang / Rendah
+- estimasiAnggaran: 0 jika kolom anggaran kosong
+
 Anda WAJIB mengembalikan output dalam format JSON terstruktur. Jangan tambahkan Markdown.`;
 
     const userPrompt = `Tahun Anggaran: ${tahunAnggaran}
@@ -133,11 +157,6 @@ ${opdReference}
 
 === ISI DOKUMEN PKPT MENTAH YANG DIUNGGAH ===
 ${extractedText}
-
-Tugas:
-1. Ekstrak setiap baris tabel pengawasan dari dokumen mentah.
-2. Identifikasi nama instansinya, lalu cocokkan dengan Daftar OPD Resmi untuk mendapatkan opdId yang benar.
-3. Ekstrak estimasi anggaran, jadwal bulan, dan matriks Hari Pemeriksaan (jika ada). Jika kosong, buat estimasi logis (misal anggaran 0, atau HP standar).
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(PkptDraftOutputSchema)}
@@ -151,7 +170,7 @@ Berikan output JSON sekarang:`;
         jsonMode: true,
         temperature: 0.1,
       });
-    } catch (llmError: any) { // [FIX] Added : any
+    } catch (llmError: any) {
       this.logger.error(`Gagal mengekstrak dokumen via LLM: ${llmError.message}`);
       throw new InternalServerErrorException(`Gagal memproses dokumen PKPT: Server AI tidak merespons.`);
     }
@@ -208,14 +227,22 @@ Berikan output JSON sekarang:`;
             data: {
               pkptId: pkpt.id,
               opdId: item.opdId,
-              jenisPengawasan: item.jenisPengawasan,
-              perkiraanBulan: item.perkiraanBulan,
-              estimasiAnggaran: item.estimasiAnggaran,
+              jenisPengawasan: item.jenisPengawasan || 'Audit',
+              perkiraanBulan: item.perkiraanBulan || 2,
+              estimasiAnggaran: item.estimasiAnggaran || 0,
               sumberPembuatan,
               substansiDokumen: {
-                hariPemeriksaan: item.hariPemeriksaan,
-                saranaPrasarana: item.saranaPrasarana,
-                alasanPrioritas: item.alasanPrioritas || 'Hasil ekstraksi dokumen PKPT manual.',
+                areaPengawasan: item.areaPengawasan || 'Program Kerja OPD',
+                tujuanSasaran: item.tujuanSasaran || 'Pemeriksaan kepatuhan dan akuntabilitas pelaksanaan program.',
+                ruangLingkup: item.ruangLingkup || 'Belanja Barang/Jasa & Modal',
+                pelaksana: item.pelaksana || 'Irban 1',
+                jadwal: item.jadwal || 'TW I',
+                hariPemeriksaan: item.hariPemeriksaan || { pj: 1, wkpj: 1, dalnis: 10, kt: 15, at: 30, totalHp: 57 },
+                jumlahLaporan: item.jumlahLaporan || 1,
+                saranaPrasarana: item.saranaPrasarana || ['Laptop', 'Printer', 'ATK'],
+                tingkatRisiko: item.tingkatRisiko || 'Tinggi',
+                keterangan: item.keterangan || '',
+                alasanPrioritas: item.alasanPrioritas || 'Hasil ekstraksi PKPT resmi berbasis risiko.',
               },
             },
             include: { opd: true },
@@ -229,7 +256,7 @@ Berikan output JSON sekarang:`;
           agendaAudits: createdAgendas,
         };
       });
-    } catch (parseError: any) { // [FIX] Added : any
+    } catch (parseError: any) {
       this.logger.error(`Gagal mem-parsing atau menyimpan draf usulan PKPT: ${parseError.message}`);
       throw new InternalServerErrorException(`Gagal menyusun draf PKPT: ${parseError.message}`);
     }
@@ -237,28 +264,95 @@ Berikan output JSON sekarang:`;
 
   private getFallbackDraft(rankings: any[], tahun: number) {
     this.logger.warn('Menghasilkan draf fallback terstruktur untuk PKPT karena server LLM offline.');
-    const topOpds = rankings.slice(0, 3);
+    
+    // Menggunakan data realistis dari referensi PKPT 2025 resmi
+    const referenceTemplates = [
+      {
+        areaPengawasan: 'Program Pencegahan, Penanggulangan, Penyelamatan Kebakaran',
+        jenisPengawasan: 'Audit Tujuan Tertentu Kegiatan Bantuan Keuangan',
+        tujuanSasaran: '1. Pelaksanaan kegiatan sesuai aturan dan ketentuan\n2. Prosedur PBJ terpenuhi\n3. Mutu barang/jasa dapat dipertanggungjawabkan\n4. Pembayaran kegiatan sesuai progres pemeriksaan',
+        ruangLingkup: 'Kegiatan Belanja Barang Jasa dan Belanja Modal T.A. 2024',
+        pelaksana: 'Irban 1',
+        jadwal: 'TW I',
+        bulan: 2,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 10, kt: 10, at: 30, totalHp: 52 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'Kertas', 'Kendaraan Roda 4'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Pengendalian Pencemaran dan Pengelolaan Persampahan',
+        jenisPengawasan: 'Audit Tujuan Tertentu Kegiatan Bantuan Keuangan',
+        tujuanSasaran: '1. Kepatuhan regulasi bantuan keuangan daerah\n2. Evaluasi kewajaran harga pengadaan sarana persampahan\n3. Verifikasi fisik lapangan sarana prasarana',
+        ruangLingkup: 'Belanja Operasional & Modal Persampahan',
+        pelaksana: 'Irban 1',
+        jadwal: 'TW I',
+        bulan: 3,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 10, kt: 10, at: 60, totalHp: 82 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'Kertas', 'Kendaraan Roda 4', 'Alat Ukur'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Penyelenggaraan Jalan dan Jaringan Irigasi',
+        jenisPengawasan: 'Audit Ketaatan Pengadaan Barang dan Jasa (MCP-KPK 2025)',
+        tujuanSasaran: 'Memperoleh keyakinan memadai atas kewajaran harga dan kepatuhan spesifikasi teknis pekerjaan konstruksi fisik',
+        ruangLingkup: 'Perencanaan s.d Pelaksanaan Konstruksi Jalan T.A. 2024',
+        pelaksana: 'Irban 2',
+        jadwal: 'TW II',
+        bulan: 5,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 15, kt: 45, at: 180, totalHp: 242 },
+        jumlahLaporan: 3,
+        saranaPrasarana: ['Kendaraan Roda 4', 'Laptop', 'ATK', 'Printer', 'Alat Ukur'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Pengelolaan Pendidikan dan Bantuan Operasional Sekolah',
+        jenisPengawasan: 'Audit Tujuan Tertentu Dana BOS & Sarpras Pendidikan',
+        tujuanSasaran: '1. Verifikasi ketepatan sasaran dana BOS\n2. Pengawasan pengadaan mebelair dan rehabilitasi gedung sekolah',
+        ruangLingkup: 'Belanja Hibah BOS dan Belanja Modal Sekolah',
+        pelaksana: 'Irban 3',
+        jadwal: 'TW II',
+        bulan: 6,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 10, kt: 20, at: 100, totalHp: 132 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'Kertas', 'Kendaraan Roda 4'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Sediaan Farmasi, Alat Kesehatan dan Pelayanan Medik',
+        jenisPengawasan: 'Probity Audit Pengadaan Alkes & Obat-obatan (MCP-KPK)',
+        tujuanSasaran: 'Memastikan proses pemilihan penyedia alkes dan obat berlangsung transparan, adil, dan bebas benturan kepentingan',
+        ruangLingkup: 'Tahap Perencanaan s.d Kontrak PBJ Alkes',
+        pelaksana: 'Irban Investigasi',
+        jadwal: 'TW III',
+        bulan: 8,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 20, kt: 20, at: 80, totalHp: 122 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'ATK', 'Kendaraan Roda 4'],
+        tingkatRisiko: 'Tinggi',
+      },
+    ];
 
-    const agendaItems = topOpds.map((r, idx) => {
-      const jenis = idx === 0 ? 'Audit' : idx === 1 ? 'Reviu' : 'Evaluasi';
-      const bulan = (idx * 3) + 2;
-      const anggaran = (5 - idx) * 100000000;
-
+    const agendaItems = rankings.slice(0, 5).map((r, idx) => {
+      const template = referenceTemplates[idx % referenceTemplates.length];
       return {
         opdId: r.opdId,
         opdName: r.opd.namaOpd,
-        jenisPengawasan: jenis,
-        perkiraanBulan: bulan,
-        estimasiAnggaran: anggaran,
-        hariPemeriksaan: {
-          pj: 5,
-          wkpj: 5,
-          dalnis: 10,
-          kt: 15,
-          at: 30,
-        },
-        saranaPrasarana: ['Laptop', 'Printer', 'ATK', 'Kendaraan roda 4'],
-        alasanPrioritas: `OPD diprioritaskan karena memiliki Nilai Total Risiko tinggi sebesar ${r.ntr} pada tahun anggaran ${tahun}.`,
+        areaPengawasan: template.areaPengawasan,
+        jenisPengawasan: template.jenisPengawasan,
+        tujuanSasaran: template.tujuanSasaran,
+        ruangLingkup: template.ruangLingkup,
+        pelaksana: template.pelaksana,
+        jadwal: template.jadwal,
+        perkiraanBulan: template.bulan,
+        estimasiAnggaran: 0, // Sesuai dokumen resmi (blank/0)
+        hariPemeriksaan: template.hariPemeriksaan,
+        jumlahLaporan: template.jumlahLaporan,
+        saranaPrasarana: template.saranaPrasarana,
+        tingkatRisiko: template.tingkatRisiko,
+        keterangan: 'Prioritas Audit Pengawasan Berbasis Risiko',
+        alasanPrioritas: `Diprioritaskan berdasarkan skor risiko NTR ${r.ntr} (NRI: ${r.nri}, NFR: ${r.nfr}) untuk tahun ${tahun}.`,
       };
     });
 

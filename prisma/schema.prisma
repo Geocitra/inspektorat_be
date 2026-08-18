@@ -71,6 +71,7 @@ model MstOpd {
   temuan           TrTemuan[]
   tiketKonsultasis TrTiketKonsultasi[]
   riskAssessments  OpdRiskAssessment[]
+  documents        AuditDocument[]
 
   @@map("mst_opd")
 }
@@ -569,6 +570,8 @@ enum DocumentType {
   LAINNYA
   RKA_PERENCANAAN
   ADENDUM_JUSTIFIKASI
+  RENSTRA
+  DOKUMEN_PBJ
 }
 
 enum DocumentStatus {
@@ -584,6 +587,7 @@ model AuditDocument {
   status    DocumentStatus @default(DRAF)
   filePath  String         @map("file_path") @db.VarChar(255)
   stId      String?        @map("st_id") @db.Uuid
+  opdId     String?        @map("opd_id") @db.Uuid
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -592,6 +596,7 @@ model AuditDocument {
   chunks     DocChunk[]
   itemAudits TrItemAuditPBJ[]
   suratTugas TrSuratTugas?   @relation(fields: [stId], references: [id], onDelete: SetNull)
+  opd        MstOpd?         @relation(fields: [opdId], references: [id], onDelete: SetNull)
 
   @@map("audit_documents")
 }

@@ -184,9 +184,7 @@ async function main() {
     data: {
       id: '00000000-0000-0000-0000-000000002026',
       tahunAnggaran: 2026,
-      statusPkpt: StatusPkpt.DISETUJUI,
-      approvedByInspekturId: pegInspektur.id,
-      approvedAt: new Date(),
+      statusPkpt: StatusPkpt.DRAF,
     },
   });
 

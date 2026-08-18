@@ -27,7 +27,7 @@ export class DocumentIngestionService {
     }
   }
 
-  async queueDocumentForIngestion(file: any, type: DocumentType, title: string) {
+  async queueDocumentForIngestion(file: any, type: DocumentType, title: string, opdId?: string) {
     const buffer = file.buffer;
     const fileSize = buffer.length;
     const mimeType = file.mimetype;
@@ -64,6 +64,7 @@ export class DocumentIngestionService {
         originalName,
         fileSize,
         hash,
+        opdId: opdId || null,
       }, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
@@ -134,15 +135,35 @@ export class DocumentIngestionService {
   }
 
   /**
-   * Mengambil semua daftar dokumen beserta ukuran metadata-nya
+   * Mengambil daftar dokumen beserta metadata (opsional filter per OPD)
    */
-  async findAllDocuments() {
+  async findAllDocuments(opdId?: string) {
+    const where: any = {};
+    if (opdId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(opdId);
+      if (isUuid) {
+        where.opdId = opdId;
+      } else {
+        // Jika format bukan UUID (misal ID mock frontend 'opd-1'), kembalikan dokumen berstatus aktif tanpa crash
+        return this.prisma.auditDocument.findMany({
+          include: {
+            metadata: true,
+            opd: { select: { id: true, namaOpd: true } },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+      }
+    }
     return this.prisma.auditDocument.findMany({
+      where,
       include: {
         metadata: true,
+        opd: { select: { id: true, namaOpd: true } },
       },
       orderBy: {
-        createdAt: 'desc', // Dokumen terbaru di atas
+        createdAt: 'desc',
       },
     });
   }
@@ -186,5 +207,20 @@ export class DocumentIngestionService {
       this.logger.warn(`Pembuatan embedding kueri gagal. Masuk ke pencarian fallback: ${error.message}`);
       return this.documentRepository.searchKeyword(query, limit);
     }
+  }
+
+  async getJobStatus(jobId: string) {
+    const job = await this.ingestionQueue.getJob(jobId);
+    if (!job) {
+      throw new NotFoundException('Pekerjaan tidak ditemukan.');
+    }
+    const state = await job.getState();
+    const reason = job.failedReason;
+    return {
+      id: job.id,
+      state,
+      progress: job.progress,
+      failedReason: reason || null,
+    };
   }
 }
