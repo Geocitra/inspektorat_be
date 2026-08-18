@@ -32,7 +32,7 @@ export const CreateStSchema = z.object({
     }),
   auditors: z
     .array(CreateStAuditorSchema)
-    .min(3, 'Tim harus memiliki minimal 3 anggota (Pengawas Teknis, Ketua Tim, dan minimal 1 Anggota Tim)'),
+    .min(1, 'Tim harus memiliki minimal 1 personil penugasan'),
 }).refine((data) => Date.parse(data.tanggalSelesai) >= Date.parse(data.tanggalMulai), {
   message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
   path: ['tanggalSelesai'],

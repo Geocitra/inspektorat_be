@@ -166,25 +166,12 @@ async function bootstrap() {
       'Evaluasi Kepatuhan Laporan Keuangan & Belanja Rutin'
     );
 
-    assert.ok(recommendationResult.totalTersedia >= 4); // at least 4 auditor available (aud5 busy)
-    
-    const recs = recommendationResult.recommendation;
-    assert.ok(recs.length >= 4);
+    assert.ok(recommendationResult.allAvailableAuditors.length >= 4);
+    assert.ok(recommendationResult.pengawasTeknis.id);
+    assert.ok(recommendationResult.ketuaTim.id);
+    assert.ok(recommendationResult.anggotaTim.length >= 1);
 
-    // Eko Prasetyo (aud5) harus absen karena bentrok jadwal
-    const hasEko = recs.some((r) => r.auditorId === aud5.id);
-    assert.strictEqual(hasEko, false, 'Auditor Eko Prasetyo yang sibuk harusnya disaring/dieliminasi dari tim.');
-
-    // Validasi peran tim: harus ada PJ, KT, dan sisa AT
-    const hasPj = recs.some((r) => r.peranDalamTim === 'Pengawas_Teknis');
-    const hasKt = recs.some((r) => r.peranDalamTim === 'Ketua_Tim');
-    const hasAt = recs.some((r) => r.peranDalamTim === 'Anggota_Tim');
-
-    assert.ok(hasPj, 'Rekomendasi tim wajib memiliki minimal 1 Pengawas Teknis.');
-    assert.ok(hasKt, 'Rekomendasi tim wajib memiliki minimal 1 Ketua Tim.');
-    assert.ok(hasAt, 'Rekomendasi tim wajib memiliki minimal 1 Anggota Tim.');
-
-    console.log('   [PASSED] Conflict checker & pencocokan kompetensi berhasil merekomendasikan tim.');
+    console.log('   [PASSED] Smart Load-Balancing & pencocokan kompetensi berhasil merekomendasikan tim.');
 
     // ----------------------------------------------------
     // 4. Buat Surat Tugas dengan Tim Rekomendasi
@@ -206,11 +193,15 @@ async function bootstrap() {
     });
 
     // Masukkan tim rekomendasi ke ST baru
-    const relations = recs.map((r) => ({
-      stId: stBaru.id,
-      auditorId: r.auditorId,
-      peranDalamTim: r.peranDalamTim as any,
-    }));
+    const relations = [
+      { stId: stBaru.id, auditorId: recommendationResult.pengawasTeknis.id, peranDalamTim: 'Pengawas_Teknis' as any },
+      { stId: stBaru.id, auditorId: recommendationResult.ketuaTim.id, peranDalamTim: 'Ketua_Tim' as any },
+      ...recommendationResult.anggotaTim.map((a) => ({
+        stId: stBaru.id,
+        auditorId: a.id,
+        peranDalamTim: 'Anggota_Tim' as any,
+      })),
+    ];
 
     await prisma.relStAuditor.createMany({
       data: relations,

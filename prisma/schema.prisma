@@ -24,6 +24,15 @@ enum SystemRole {
   KEPALA_DAERAH   // Bupati/Walikota (read-only dashboard)
 }
 
+// Unit Kerja Wilayah Pengawasan Inspektorat
+enum UnitKerja {
+  IRBAN_1
+  IRBAN_2
+  IRBAN_3
+  IRBAN_INVESTIGASI
+  SEKRETARIAT
+}
+
 // Sumber data pegawai: manual diinput atau hasil sinkronisasi dari BKD
 enum SumberData {
   MANUAL
@@ -82,6 +91,8 @@ model MstPegawai {
   nama                    String                     @map("nama") @db.VarChar(255)
   golongan                String?                    @map("golongan") @db.VarChar(100)
   jabatan                 String?                    @map("jabatan") @db.VarChar(100)
+  unitKerja               UnitKerja?                 @default(IRBAN_1) @map("unit_kerja")
+  isAuditorLapangan       Boolean                    @default(true) @map("is_auditor_lapangan")
   opdId                   String                     @map("opd_id") @db.Uuid
   sumberData              SumberData                 @default(MANUAL) @map("sumber_data")
   terakhirDisinkronkan    DateTime?                  @map("terakhir_disinkronkan") @db.Timestamptz

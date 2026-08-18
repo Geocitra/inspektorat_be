@@ -7,18 +7,27 @@
 
 import { z } from 'zod';
 
+export const UnitKerjaEnum = z.enum([
+  'IRBAN_1',
+  'IRBAN_2',
+  'IRBAN_3',
+  'IRBAN_INVESTIGASI',
+  'SEKRETARIAT',
+]);
+
 export const CreatePegawaiSchema = z.object({
   nip: z
     .string({ required_error: 'NIP wajib diisi' })
-    .min(10, 'NIP minimal 10 digit')
-    .max(50, 'NIP maksimal 50 karakter')
-    .regex(/^\d+$/, 'NIP hanya boleh berisi angka'),
+    .min(5, 'NIP minimal 5 karakter')
+    .max(50, 'NIP maksimal 50 karakter'),
   nama: z
     .string({ required_error: 'Nama pegawai wajib diisi' })
     .min(3, 'Nama minimal 3 karakter')
     .max(255, 'Nama maksimal 255 karakter'),
   golongan: z.string().max(100, 'Golongan maksimal 100 karakter').optional(),
   jabatan: z.string().max(100, 'Jabatan maksimal 100 karakter').optional(),
+  unitKerja: UnitKerjaEnum.default('IRBAN_1').optional(),
+  isAuditorLapangan: z.boolean().default(true).optional(),
   opdId: z
     .string({ required_error: 'OPD ID wajib diisi' })
     .uuid('Format OPD ID tidak valid (harus UUID)'),

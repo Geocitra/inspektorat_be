@@ -4,39 +4,44 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStDto, SignStDto } from './dto/st.dto';
 
 @Injectable()
 export class AssignmentService {
+  private readonly logger = new Logger(AssignmentService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Membuat draf Surat Tugas baru (Status: DRAF).
-   * Menjalankan Conflict Checker untuk mendeteksi tumpukan jadwal.
+   * Membuat draf Surat Tugas baru.
+   * Mendukung penugasan mandiri (1 personil) maupun tim lengkap (PT, KT, AT).
    */
   async createSt(dto: CreateStDto) {
     const startDate = new Date(dto.tanggalMulai);
     const endDate = new Date(dto.tanggalSelesai);
 
-    // 1. Validasi Agenda Audit (jika di-link dari PKPT rutin)
+    // 1. Validasi relasi Agenda PKPT jika ada
     if (dto.agendaAuditId) {
       const agenda = await this.prisma.trAgendaAudit.findUnique({
         where: { id: dto.agendaAuditId },
         include: { pkpt: true },
       });
+
       if (!agenda) {
-        throw new NotFoundException('Agenda audit tidak ditemukan.');
+        throw new NotFoundException('Agenda audit PKPT tidak ditemukan.');
       }
+
       if (agenda.pkpt.statusPkpt !== 'DISETUJUI') {
-        throw new ConflictException(
-          'Surat Tugas tidak dapat dibuat karena PKPT agenda ini belum disetujui Inspektur.',
+        throw new BadRequestException(
+          `Surat Tugas hanya dapat diterbitkan untuk PKPT yang berstatus DISETUJUI. Status saat ini: ${agenda.pkpt.statusPkpt}`,
         );
       }
 
-      // Cek apakah agenda ini sudah pernah dikaitkan ke ST lain
-      const existingSt = await this.prisma.trSuratTugas.findUnique({
+      // Mencegah duplikasi Surat Tugas untuk agenda yang sama
+      const existingSt = await this.prisma.trSuratTugas.findFirst({
         where: { agendaAuditId: dto.agendaAuditId },
       });
       if (existingSt) {
@@ -46,27 +51,21 @@ export class AssignmentService {
       }
     }
 
-    // 2. Validasi Tim: Pengawas Teknis (1), Ketua Tim (1), Anggota Tim (>= 1)
+    // 2. Validasi Personil Penugasan (Minimal 1 personil)
     const auditors = dto.auditors;
-    const hasPt = auditors.some((a) => a.peranDalamTim === 'Pengawas_Teknis');
-    const hasKt = auditors.some((a) => a.peranDalamTim === 'Ketua_Tim');
-    const hasAt = auditors.some((a) => a.peranDalamTim === 'Anggota_Tim');
-
-    if (!hasPt) {
-      throw new BadRequestException('Tim harus memiliki minimal 1 Pengawas Teknis.');
-    }
-    if (!hasKt) {
-      throw new BadRequestException('Tim harus memiliki minimal 1 Ketua Tim.');
-    }
-    if (!hasAt) {
-      throw new BadRequestException('Tim harus memiliki minimal 1 Anggota Tim.');
+    if (!auditors || auditors.length === 0) {
+      throw new BadRequestException('Surat Tugas harus memiliki minimal 1 personil.');
     }
 
-    // 3. Algoritma Conflict Checker (Deteksi bentrok jadwal auditor pada ST aktif)
-    const auditorIds = auditors.map((a) => a.auditorId);
-    await this.checkAuditorConflicts(auditorIds, startDate, endDate);
+    // 3. Validasi Kapasitas Beban Kerja (Workload Capacity Validator)
+    await this.validateAuditorWorkloads(
+      auditors.map((a) => ({
+        auditorId: a.auditorId as string,
+        peranDalamTim: a.peranDalamTim as string,
+      })),
+    );
 
-    // 4. Create dalam transaksi
+    // 4. Buat Surat Tugas & Relasi Auditor dalam transaksi
     return this.prisma.$transaction(async (tx) => {
       const st = await tx.trSuratTugas.create({
         data: {
@@ -124,7 +123,6 @@ export class AssignmentService {
       );
     }
 
-    // Simulasi validasi passphrase certificate (misal: minimal 'tte-apip')
     if (dto.digitalCertificate.toLowerCase() === 'passphrase-salah') {
       throw new BadRequestException(
         'Sertifikat digital tidak valid atau passphrase salah.',
@@ -141,6 +139,11 @@ export class AssignmentService {
         stAuditors: {
           include: {
             auditor: true,
+          },
+        },
+        agendaAudit: {
+          include: {
+            opd: true,
           },
         },
       },
@@ -196,64 +199,146 @@ export class AssignmentService {
   }
 
   /**
-   * Konflik checker jadwal auditor (Public).
+   * Validasi Kapasitas Beban Kerja (Concurrent Multi-Assignment Quota)
+   * Batas kuota wajar:
+   * - Pengawas Teknis / Dalnis: max 5 ST Aktif
+   * - Ketua Tim: max 3 ST Aktif
+   * - Anggota Tim: max 3 ST Aktif
    */
-  async checkAuditorConflicts(
-    auditorIds: string[],
-    startDate: Date,
-    endDate: Date,
+  async validateAuditorWorkloads(
+    auditors: Array<{ auditorId: string; peranDalamTim: string }>,
   ): Promise<void> {
-    const conflictingAssignment = await this.prisma.relStAuditor.findFirst({
-      where: {
-        auditorId: { in: auditorIds },
-        suratTugas: {
-          statusSt: 'AKTIF',
-          tanggalMulai: { lte: endDate },
-          tanggalSelesai: { gte: startDate },
+    for (const item of auditors) {
+      const activeAssignments = await this.prisma.relStAuditor.findMany({
+        where: {
+          auditorId: item.auditorId,
+          suratTugas: { statusSt: 'AKTIF' },
         },
-      },
-      include: {
-        auditor: true,
-        suratTugas: true,
-      },
-    });
+        include: { auditor: true },
+      });
 
-    if (conflictingAssignment) {
-      const formatter = new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' });
-      throw new ConflictException(
-        `Auditor bernama "${conflictingAssignment.auditor.nama}" tidak dapat ditugaskan. ` +
-          `Sebab yang bersangkutan aktif bertugas pada ST Nomor ${conflictingAssignment.suratTugas.nomorSt} ` +
-          `rentang tanggal ${formatter.format(conflictingAssignment.suratTugas.tanggalMulai)} s.d ` +
-          `${formatter.format(conflictingAssignment.suratTugas.tanggalSelesai)}.`,
-      );
+      const maxLimit = item.peranDalamTim === 'Pengawas_Teknis' ? 5 : 3;
+      if (activeAssignments.length >= maxLimit) {
+        const auditorName = activeAssignments[0]?.auditor?.nama || 'Auditor';
+        throw new ConflictException(
+          `Kapasitas beban kerja terlampaui: "${auditorName}" telah memegang ${activeAssignments.length} Surat Tugas aktif (Batas maksimal ${maxLimit} ST). Silakan pilih personil lain.`,
+        );
+      }
     }
   }
 
   /**
-   * Mengambil daftar auditor yang tidak memiliki konflik jadwal (tidak sibuk di ST Aktif)
+   * Mengambil daftar seluruh auditor fungsional lengkap dengan profil beban kerja terkini
+   * (Digunakan oleh Form Frontend untuk menampilkan badge 🟢, 🟡, 🔴)
    */
-  async getAvailableAuditors(startDate: Date, endDate: Date) {
-    const busyAuditors = await this.prisma.relStAuditor.findMany({
+  async getAuditorsWithWorkload() {
+    const pegawaiList = await this.prisma.mstPegawai.findMany({
       where: {
-        suratTugas: {
-          statusSt: 'AKTIF',
-          tanggalMulai: { lte: endDate },
-          tanggalSelesai: { gte: startDate },
-        },
+        isAuditorLapangan: true,
       },
-      select: {
-        auditorId: true,
-      },
-    });
-
-    const busyIds = busyAuditors.map((r) => r.auditorId);
-
-    return this.prisma.mstPegawai.findMany({
-      where: busyIds.length > 0 ? { id: { notIn: busyIds } } : {},
       include: {
         opd: true,
+        stAuditors: {
+          where: {
+            suratTugas: { statusSt: 'AKTIF' },
+          },
+          include: {
+            suratTugas: {
+              include: {
+                agendaAudit: {
+                  include: { opd: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { nama: 'asc' },
+    });
+
+    return pegawaiList.map((p) => {
+      const activeStCount = p.stAuditors.length;
+      const activeStDetails = p.stAuditors.map((sa) => ({
+        nomorSt: sa.suratTugas.nomorSt,
+        peran: sa.peranDalamTim,
+        namaOpd: sa.suratTugas.agendaAudit?.opd?.namaOpd || 'Audit Umum',
+      }));
+
+      let workloadLevel: 'LONGGAR' | 'SEDANG' | 'PENUH' = 'LONGGAR';
+      if (activeStCount >= 3) {
+        workloadLevel = 'PENUH';
+      } else if (activeStCount >= 1) {
+        workloadLevel = 'SEDANG';
+      }
+
+      return {
+        id: p.id,
+        nip: p.nip,
+        nama: p.nama,
+        golongan: p.golongan,
+        jabatan: p.jabatan,
+        unitKerja: p.unitKerja || 'IRBAN_1',
+        activeStCount,
+        workloadLevel,
+        activeStDetails,
+      };
+    });
+  }
+
+  /**
+   * Helper untuk meng-generate Nomor ST otomatis dan rentang tanggal kerja
+   */
+  async generateStMeta(agendaAuditId?: string) {
+    const currentYear = new Date().getFullYear();
+    const countThisYear = await this.prisma.trSuratTugas.count({
+      where: {
+        tanggalMulai: {
+          gte: new Date(`${currentYear}-01-01`),
+          lte: new Date(`${currentYear}-12-31`),
+        },
       },
     });
+
+    const nextSeq = String(countThisYear + 1).padStart(3, '0');
+    let unitCode = 'IRB.I';
+    let durationHp = 15; // default 15 hari kerja
+
+    if (agendaAuditId) {
+      const agenda = await this.prisma.trAgendaAudit.findUnique({
+        where: { id: agendaAuditId },
+      });
+      if (agenda) {
+        const sub = (agenda.substansiDokumen as any) || {};
+        const pelaksana = (sub.pelaksana || '').toUpperCase();
+        if (pelaksana.includes('IRBAN 2') || pelaksana.includes('IRBAN II')) unitCode = 'IRB.II';
+        else if (pelaksana.includes('IRBAN 3') || pelaksana.includes('IRBAN III')) unitCode = 'IRB.III';
+        else if (pelaksana.includes('INVESTIGASI')) unitCode = 'IRB.INV';
+        else if (pelaksana.includes('GABUNGAN') || pelaksana.includes('PPUPD')) unitCode = 'TIM.GAB';
+
+        if (sub.hariPemeriksaan?.totalHp) {
+          durationHp = Math.min(60, Number(sub.hariPemeriksaan.totalHp) || 15);
+        }
+      }
+    }
+
+    const nomorSt = `ST.700.1.2/${nextSeq}/ITDA-${unitCode}/${currentYear}`;
+
+    // Hitung tanggal mulai (Senin terdekat) dan tanggal selesai (menambah hari kerja)
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() + 2); // Mulai 2 hari ke depan
+    if (startDate.getDay() === 0) startDate.setDate(startDate.getDate() + 1); // Jika minggu -> senin
+    if (startDate.getDay() === 6) startDate.setDate(startDate.getDate() + 2); // Jika sabtu -> senin
+
+    const endDate = new Date(startDate);
+    // Tambah hari kalender kasar sesuai estimasi HP
+    endDate.setDate(endDate.getDate() + Math.ceil(durationHp * 1.4));
+
+    return {
+      suggestedNomorSt: nomorSt,
+      suggestedStartDate: startDate.toISOString().split('T')[0],
+      suggestedEndDate: endDate.toISOString().split('T')[0],
+      estimatedHp: durationHp,
+    };
   }
 
   /**

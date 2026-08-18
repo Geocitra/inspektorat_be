@@ -56,6 +56,24 @@ export class AssignmentController {
   }
 
   /**
+   * GET /api/v1/surat-tugas/meta/generate
+   * Mendapatkan rekomendasi nomor ST dan rentang tanggal dinas otomatis.
+   */
+  @Get('meta/generate')
+  generateStMeta(@Body('agendaId') agendaIdBody?: string, @Param('agendaId') agendaIdParam?: string) {
+    return this.assignmentService.generateStMeta(agendaIdBody || agendaIdParam);
+  }
+
+  /**
+   * GET /api/v1/surat-tugas/auditors/workload
+   * Mengambil seluruh auditor fungsional lengkap dengan indikator beban kerja aktif (🟢 🟡 🔴).
+   */
+  @Get('auditors/workload')
+  getAuditorsWithWorkload() {
+    return this.assignmentService.getAuditorsWithWorkload();
+  }
+
+  /**
    * GET /api/v1/surat-tugas
    * List seluruh Surat Tugas.
    */

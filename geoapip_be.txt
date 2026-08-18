@@ -838,6 +838,7 @@ model MstOpd {
   temuan           TrTemuan[]
   tiketKonsultasis TrTiketKonsultasi[]
   riskAssessments  OpdRiskAssessment[]
+  documents        AuditDocument[]
 
   @@map("mst_opd")
 }
@@ -1336,6 +1337,8 @@ enum DocumentType {
   LAINNYA
   RKA_PERENCANAAN
   ADENDUM_JUSTIFIKASI
+  RENSTRA
+  DOKUMEN_PBJ
 }
 
 enum DocumentStatus {
@@ -1351,6 +1354,7 @@ model AuditDocument {
   status    DocumentStatus @default(DRAF)
   filePath  String         @map("file_path") @db.VarChar(255)
   stId      String?        @map("st_id") @db.Uuid
+  opdId     String?        @map("opd_id") @db.Uuid
   createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -1359,6 +1363,7 @@ model AuditDocument {
   chunks     DocChunk[]
   itemAudits TrItemAuditPBJ[]
   suratTugas TrSuratTugas?   @relation(fields: [stId], references: [id], onDelete: SetNull)
+  opd        MstOpd?         @relation(fields: [opdId], references: [id], onDelete: SetNull)
 
   @@map("audit_documents")
 }
@@ -2341,6 +2346,8 @@ export class AssignmentController {
       new Date(dto.tanggalMulai),
       new Date(dto.tanggalSelesai),
       dto.fokusAudit,
+      dto.agendaAuditId,
+      dto.pelaksana,
     );
   }
 
@@ -2677,6 +2684,16 @@ export const RecommendTeamSchema = z.object({
     .string({ required_error: 'Fokus audit wajib diisi untuk pencocokan kompetensi' })
     .min(3, 'Fokus audit minimal 3 karakter')
     .max(500),
+  agendaAuditId: z
+    .string()
+    .uuid('Format Agenda Audit ID tidak valid')
+    .optional()
+    .nullable(),
+  pelaksana: z
+    .string()
+    .max(100)
+    .optional()
+    .nullable(),
 }).refine((data) => Date.parse(data.tanggalSelesai) >= Date.parse(data.tanggalMulai), {
   message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
   path: ['tanggalSelesai'],
@@ -2907,8 +2924,31 @@ export class TeamAllocationService {
     private readonly assignmentService: AssignmentService,
   ) {}
 
-  async recommendTeam(startDate: Date, endDate: Date, fokusAudit: string) {
+  async recommendTeam(
+    startDate: Date,
+    endDate: Date,
+    fokusAudit: string,
+    agendaAuditId?: string | null,
+    pelaksanaOverride?: string | null,
+  ) {
     this.logger.log(`Mencari rekomendasi tim auditor bebas konflik untuk rentang ${startDate.toISOString()} s.d ${endDate.toISOString()}...`);
+
+    let targetPelaksana = pelaksanaOverride || '';
+    let areaPengawasan = '';
+    let alokasiHp = null;
+
+    if (agendaAuditId) {
+      const agenda = await this.prisma.trAgendaAudit.findUnique({
+        where: { id: agendaAuditId },
+        include: { opd: true, pkpt: true },
+      });
+      if (agenda) {
+        const sub = (agenda.substansiDokumen as any) || {};
+        targetPelaksana = targetPelaksana || sub.pelaksana || '';
+        areaPengawasan = sub.areaPengawasan || agenda.jenisPengawasan || '';
+        alokasiHp = sub.hariPemeriksaan || null;
+      }
+    }
 
     const availableAuditors = await this.assignmentService.getAvailableAuditors(startDate, endDate);
     if (availableAuditors.length < 3) {
@@ -2919,23 +2959,28 @@ export class TeamAllocationService {
 
     const scoredAuditors = availableAuditors.map((auditor) => {
       let score = 0.5;
-      const focusLower = fokusAudit.toLowerCase();
+      const focusLower = `${fokusAudit} ${areaPengawasan}`.toLowerCase();
       const namaLower = auditor.nama.toLowerCase();
       const jabLower = (auditor.jabatan || '').toLowerCase();
+      const pelaksanaLower = targetPelaksana.toLowerCase();
 
-      if (focusLower.includes('keuangan') || focusLower.includes('anggaran')) {
+      if (pelaksanaLower && jabLower.includes(pelaksanaLower)) {
+        score += 0.25;
+      }
+
+      if (focusLower.includes('keuangan') || focusLower.includes('anggaran') || focusLower.includes('bos')) {
         if (jabLower.includes('akuntan') || jabLower.includes('keuangan') || jabLower.includes('auditor')) {
-          score += 0.3;
-        }
-      }
-      if (focusLower.includes('fisik') || focusLower.includes('konstruksi') || focusLower.includes('pbj')) {
-        if (jabLower.includes('teknik') || jabLower.includes('sipil') || jabLower.includes('ppupd')) {
-          score += 0.3;
-        }
-      }
-      if (focusLower.includes('kinerja') || focusLower.includes('evaluasi')) {
-        if (jabLower.includes('ahli madya') || jabLower.includes('muda')) {
           score += 0.2;
+        }
+      }
+      if (focusLower.includes('fisik') || focusLower.includes('konstruksi') || focusLower.includes('pbj') || focusLower.includes('jalan')) {
+        if (jabLower.includes('teknik') || jabLower.includes('sipil') || jabLower.includes('ppupd')) {
+          score += 0.2;
+        }
+      }
+      if (focusLower.includes('kinerja') || focusLower.includes('evaluasi') || focusLower.includes('probity')) {
+        if (jabLower.includes('ahli madya') || jabLower.includes('muda') || jabLower.includes('investigasi')) {
+          score += 0.15;
         }
       }
 
@@ -2960,27 +3005,29 @@ export class TeamAllocationService {
         nama: pj.nama,
         jabatan: pj.jabatan,
         peranDalamTim: 'Pengawas_Teknis',
-        score: pj.score,
+        score: Number(pj.score.toFixed(2)),
       },
       {
         auditorId: kt.id,
         nama: kt.nama,
         jabatan: kt.jabatan,
         peranDalamTim: 'Ketua_Tim',
-        score: kt.score,
+        score: Number(kt.score.toFixed(2)),
       },
       ...ats.map((at) => ({
         auditorId: at.id,
         nama: at.nama,
         jabatan: at.jabatan,
         peranDalamTim: 'Anggota_Tim',
-        score: at.score,
+        score: Number(at.score.toFixed(2)),
       })),
     ];
 
-    this.logger.log(`Berhasil merekomendasikan tim berisi ${team.length} auditor.`);
+    this.logger.log(`Berhasil merekomendasikan tim (${targetPelaksana || 'APIP Umum'}) berisi ${team.length} auditor.`);
     return {
       fokusAudit,
+      unitPelaksana: targetPelaksana || 'Tim Gabungan APIP',
+      alokasiHariPemeriksaan: alokasiHp,
       periodePenugasan: {
         mulai: startDate,
         selesai: endDate,
@@ -3464,64 +3511,100 @@ export const PkptDraftOutputSchema = {
   properties: {
     agendaItems: {
       type: 'array',
-      description: 'Daftar usulan agenda audit untuk OPD-OPD yang di-ranking',
+      description: 'Daftar usulan agenda audit PKPT berbasis risiko sesuai 14 kolom standar pengawasan',
       items: {
         type: 'object',
         properties: {
           opdId: {
             type: 'string',
-            description: 'UUID OPD target yang didapat dari data ranking input',
+            description: 'UUID OPD target dari database resmi',
           },
           opdName: {
             type: 'string',
-            description: 'Nama OPD target',
+            description: 'Nama Perangkat Daerah / OPD',
+          },
+          areaPengawasan: {
+            type: 'string',
+            description: 'Area Pengawasan / Nama Program Kerja yang diawasi (contoh: Program Pencegahan Kebakaran, Program Pengelolaan Pendidikan)',
           },
           jenisPengawasan: {
             type: 'string',
-            enum: ['Audit', 'Reviu', 'Evaluasi', 'Pemantauan'],
-            description: 'Tipe pengawasan yang direkomendasikan',
+            description: 'Jenis Pengawasan (contoh: Audit Tujuan Tertentu, Audit Ketaatan PBJ, Probity Audit, Reviu, Evaluasi, Pemantauan)',
+          },
+          tujuanSasaran: {
+            type: 'string',
+            description: 'Tujuan dan Sasaran pemeriksaan (poin-poin target assurance/advisory)',
+          },
+          ruangLingkup: {
+            type: 'string',
+            description: 'Ruang lingkup audit (contoh: Belanja Barang & Modal T.A. 2024, Perencanaan s.d Pelaksanaan PBJ)',
+          },
+          pelaksana: {
+            type: 'string',
+            description: 'Unit Pelaksana Inspektorat (contoh: Irban 1, Irban 2, Irban 3, Irban Investigasi)',
+          },
+          jadwal: {
+            type: 'string',
+            description: 'Jadwal pelaksanaan (contoh: TW I, TW II, TW III, TW IV)',
           },
           perkiraanBulan: {
             type: 'integer',
             minimum: 1,
             maximum: 12,
-            description: 'Perkiraan bulan pelaksanaan (1 s.d 12)',
+            description: 'Perkiraan bulan mulai pelaksanaan (1 s.d 12)',
           },
           estimasiAnggaran: {
             type: 'number',
             minimum: 0,
-            description: 'Alokasi anggaran kas dalam rupiah',
+            description: 'Estimasi anggaran pengawasan jika ada (default: 0 jika tidak dicantumkan)',
           },
           hariPemeriksaan: {
             type: 'object',
             properties: {
-              pj: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Penanggung Jawab' },
-              wkpj: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Wakil Penanggung Jawab' },
-              dalnis: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Pengendali Teknis' },
-              kt: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Ketua Tim' },
-              at: { type: 'integer', minimum: 0, description: 'Hari Pemeriksaan Anggota Tim' },
+              pj: { type: 'integer', minimum: 0, description: 'HP Penanggung Jawab' },
+              wkpj: { type: 'integer', minimum: 0, description: 'HP Wakil Penanggung Jawab' },
+              dalnis: { type: 'integer', minimum: 0, description: 'HP Pengendali Teknis' },
+              kt: { type: 'integer', minimum: 0, description: 'HP Ketua Tim' },
+              at: { type: 'integer', minimum: 0, description: 'HP Anggota Tim' },
+              totalHp: { type: 'integer', minimum: 0, description: 'Total Hari Pemeriksaan (JUM HP)' },
             },
-            required: ['pj', 'wkpj', 'dalnis', 'kt', 'at'],
+            required: ['pj', 'dalnis', 'kt', 'at', 'totalHp'],
+          },
+          jumlahLaporan: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Jumlah Laporan Hasil Pengawasan (JUM LAP)',
           },
           saranaPrasarana: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Daftar kebutuhan logistik (contoh: Laptop, Printer, Kertas, Mobil Dinas)',
+            description: 'Kebutuhan sarana dan prasarana logistik (contoh: Laptop, Printer, ATK, Kendaraan Roda 4, Alat Ukur)',
+          },
+          tingkatRisiko: {
+            type: 'string',
+            enum: ['Tinggi', 'Sedang', 'Rendah'],
+            description: 'Tingkat Risiko audit',
+          },
+          keterangan: {
+            type: 'string',
+            description: 'Keterangan tambahan',
           },
           alasanPrioritas: {
             type: 'string',
-            description: 'Justifikasi naratif mengapa OPD ini diprioritaskan untuk jenis pengawasan tersebut berdasarkan tingkat risikonya',
+            description: 'Justifikasi pemilihan agenda pengawasan',
           },
         },
         required: [
           'opdId',
           'opdName',
+          'areaPengawasan',
           'jenisPengawasan',
-          'perkiraanBulan',
-          'estimasiAnggaran',
+          'tujuanSasaran',
+          'ruangLingkup',
+          'pelaksana',
+          'jadwal',
           'hariPemeriksaan',
-          'saranaPrasarana',
-          'alasanPrioritas',
+          'tingkatRisiko',
         ],
       },
     },
@@ -3590,7 +3673,20 @@ export class PkptGeneratorService {
     }
 
     const systemPrompt = `Anda adalah AI Asisten Analitis dan Penyusun Draf (Copilot) untuk Inspektorat Daerah.
-Tugas Anda adalah menyusun usulan draf program kerja pengawasan tahunan (PKPT) & Agenda Audit untuk OPD-OPD berdasarkan tingkat risiko (NTR), data anggaran/geografis, dan pedoman regulasi pengawasan.
+Tugas Anda adalah menyusun usulan draf program kerja pengawasan tahunan (PKPT) & Agenda Audit untuk OPD-OPD berdasarkan tingkat risiko (NTR), data anggaran/geografis, dan 14 kolom standar format PKPT resmi Inspektorat.
+Atribut wajib per agenda meliputi:
+- areaPengawasan: Program kerja/bidang yang diawasi
+- jenisPengawasan: Audit Tujuan Tertentu, Audit Ketaatan PBJ, Probity Audit, Reviu, Evaluasi, atau Pemantauan
+- tujuanSasaran: Poin-poin tujuan pengawasan secara komprehensif
+- ruangLingkup: Batasan pemeriksaan (contoh: Belanja Barang Jasa & Modal)
+- pelaksana: Unit pelaksana (Irban 1, Irban 2, Irban 3, atau Irban Investigasi)
+- jadwal: Triwulan (TW I, TW II, TW III, atau TW IV)
+- hariPemeriksaan: Alokasi HP (pj, wkpj, dalnis, kt, at, totalHp)
+- jumlahLaporan: Jumlah LHP (1, 2, atau 3)
+- saranaPrasarana: Daftar logistik (Laptop, Printer, ATK, Kendaraan Roda 4, Alat Ukur)
+- tingkatRisiko: Tinggi, Sedang, atau Rendah
+- estimasiAnggaran: 0 jika tidak dicantumkan di anggaran pengawasan langsung
+
 Anda WAJIB mengembalikan output dalam format JSON terstruktur yang mengikuti JSON Schema yang diberikan. Jangan mengarang data di luar konteks. Jangan menambahkan penjelasan teks Markdown di luar objek JSON.`;
 
     const userPrompt = `Tahun Anggaran: ${tahunAnggaran}
@@ -3601,9 +3697,6 @@ ${rankingString}
 
 Berikut adalah Regulasi Acuan (Kriteria):
 ${criteriaText || 'Gunakan pedoman standard audit berbasis risiko Inspektorat.'}
-
-Anda WAJIB menghasilkan draf usulan pengawasan untuk OPD-OPD di atas.
-Pecah Hari Pemeriksaan (HP) untuk masing-masing peran tim (PJ, WKPJ, Dalnis, KT, AT) secara logis sesuai tingkat kesulitan.
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(PkptDraftOutputSchema)}
@@ -3646,9 +3739,23 @@ Berikan output JSON sekarang:`;
       .join('\n');
 
     const systemPrompt = `Anda adalah AI Asisten Data Ekstraktor untuk Inspektorat Daerah.
-Tugas Anda adalah membaca teks acak/tabel dari dokumen PKPT mentah, dan mengekstrak jadwal, anggaran, serta alokasi hari pemeriksaan ke dalam format JSON.
+Tugas Anda adalah membaca teks/tabel dari dokumen PKPT mentah (Excel/PDF) dan mengekstrak seluruh baris agenda pengawasan secara utuh ke dalam format JSON 14 kolom standar PKPT.
 SANGAT PENTING: Anda WAJIB mencocokkan (Fuzzy Match) nama instansi/OPD di dokumen mentah dengan DAFTAR OPD RESMI yang diberikan.
 Anda HANYA BOLEH menggunakan 'opdId' dan 'opdName' yang terdapat di dalam daftar resmi tersebut. Jika tidak yakin, pilih yang ejaannya paling mirip.
+Untuk setiap baris, ekstrak:
+- areaPengawasan: Area Pengawasan / Program
+- jenisPengawasan: Audit Tujuan Tertentu, Audit Ketaatan PBJ, Probity Audit, Reviu, Evaluasi, dll.
+- tujuanSasaran: Seluruh poin tujuan sasaran yang tertulis
+- ruangLingkup: Ruang lingkup pemeriksaan
+- pelaksana: Irban 1 / Irban 2 / Irban 3 / Irban Investigasi
+- jadwal: TW I / TW II / TW III / TW IV
+- perkiraanBulan: Konversi dari TW (TW I=2, TW II=5, TW III=8, TW IV=11)
+- hariPemeriksaan: Matriks HP (pj, wkpj, dalnis, kt, at, totalHp)
+- jumlahLaporan: Angka dari kolom JUM LAP (default 1 jika kosong)
+- saranaPrasarana: Array teks sarana prasarana yang tercantum (contoh: ["Laptop", "Printer", "Kertas", "Kendaraan Roda 4"])
+- tingkatRisiko: Tinggi / Sedang / Rendah
+- estimasiAnggaran: 0 jika kolom anggaran kosong
+
 Anda WAJIB mengembalikan output dalam format JSON terstruktur. Jangan tambahkan Markdown.`;
 
     const userPrompt = `Tahun Anggaran: ${tahunAnggaran}
@@ -3658,11 +3765,6 @@ ${opdReference}
 
 === ISI DOKUMEN PKPT MENTAH YANG DIUNGGAH ===
 ${extractedText}
-
-Tugas:
-1. Ekstrak setiap baris tabel pengawasan dari dokumen mentah.
-2. Identifikasi nama instansinya, lalu cocokkan dengan Daftar OPD Resmi untuk mendapatkan opdId yang benar.
-3. Ekstrak estimasi anggaran, jadwal bulan, dan matriks Hari Pemeriksaan (jika ada). Jika kosong, buat estimasi logis (misal anggaran 0, atau HP standar).
 
 JSON Schema Output yang WAJIB diikuti:
 ${JSON.stringify(PkptDraftOutputSchema)}
@@ -3730,14 +3832,22 @@ Berikan output JSON sekarang:`;
             data: {
               pkptId: pkpt.id,
               opdId: item.opdId,
-              jenisPengawasan: item.jenisPengawasan,
-              perkiraanBulan: item.perkiraanBulan,
-              estimasiAnggaran: item.estimasiAnggaran,
+              jenisPengawasan: item.jenisPengawasan || 'Audit',
+              perkiraanBulan: item.perkiraanBulan || 2,
+              estimasiAnggaran: item.estimasiAnggaran || 0,
               sumberPembuatan,
               substansiDokumen: {
-                hariPemeriksaan: item.hariPemeriksaan,
-                saranaPrasarana: item.saranaPrasarana,
-                alasanPrioritas: item.alasanPrioritas || 'Hasil ekstraksi dokumen PKPT manual.',
+                areaPengawasan: item.areaPengawasan || 'Program Kerja OPD',
+                tujuanSasaran: item.tujuanSasaran || 'Pemeriksaan kepatuhan dan akuntabilitas pelaksanaan program.',
+                ruangLingkup: item.ruangLingkup || 'Belanja Barang/Jasa & Modal',
+                pelaksana: item.pelaksana || 'Irban 1',
+                jadwal: item.jadwal || 'TW I',
+                hariPemeriksaan: item.hariPemeriksaan || { pj: 1, wkpj: 1, dalnis: 10, kt: 15, at: 30, totalHp: 57 },
+                jumlahLaporan: item.jumlahLaporan || 1,
+                saranaPrasarana: item.saranaPrasarana || ['Laptop', 'Printer', 'ATK'],
+                tingkatRisiko: item.tingkatRisiko || 'Tinggi',
+                keterangan: item.keterangan || '',
+                alasanPrioritas: item.alasanPrioritas || 'Hasil ekstraksi PKPT resmi berbasis risiko.',
               },
             },
             include: { opd: true },
@@ -3759,28 +3869,94 @@ Berikan output JSON sekarang:`;
 
   private getFallbackDraft(rankings: any[], tahun: number) {
     this.logger.warn('Menghasilkan draf fallback terstruktur untuk PKPT karena server LLM offline.');
-    const topOpds = rankings.slice(0, 3);
 
-    const agendaItems = topOpds.map((r, idx) => {
-      const jenis = idx === 0 ? 'Audit' : idx === 1 ? 'Reviu' : 'Evaluasi';
-      const bulan = (idx * 3) + 2;
-      const anggaran = (5 - idx) * 100000000;
+    const referenceTemplates = [
+      {
+        areaPengawasan: 'Program Pencegahan, Penanggulangan, Penyelamatan Kebakaran',
+        jenisPengawasan: 'Audit Tujuan Tertentu Kegiatan Bantuan Keuangan',
+        tujuanSasaran: '1. Pelaksanaan kegiatan sesuai aturan dan ketentuan\n2. Prosedur PBJ terpenuhi\n3. Mutu barang/jasa dapat dipertanggungjawabkan\n4. Pembayaran kegiatan sesuai progres pemeriksaan',
+        ruangLingkup: 'Kegiatan Belanja Barang Jasa dan Belanja Modal T.A. 2024',
+        pelaksana: 'Irban 1',
+        jadwal: 'TW I',
+        bulan: 2,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 10, kt: 10, at: 30, totalHp: 52 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'Kertas', 'Kendaraan Roda 4'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Pengendalian Pencemaran dan Pengelolaan Persampahan',
+        jenisPengawasan: 'Audit Tujuan Tertentu Kegiatan Bantuan Keuangan',
+        tujuanSasaran: '1. Kepatuhan regulasi bantuan keuangan daerah\n2. Evaluasi kewajaran harga pengadaan sarana persampahan\n3. Verifikasi fisik lapangan sarana prasarana',
+        ruangLingkup: 'Belanja Operasional & Modal Persampahan',
+        pelaksana: 'Irban 1',
+        jadwal: 'TW I',
+        bulan: 3,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 10, kt: 10, at: 60, totalHp: 82 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'Kertas', 'Kendaraan Roda 4', 'Alat Ukur'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Penyelenggaraan Jalan dan Jaringan Irigasi',
+        jenisPengawasan: 'Audit Ketaatan Pengadaan Barang dan Jasa (MCP-KPK 2025)',
+        tujuanSasaran: 'Memperoleh keyakinan memadai atas kewajaran harga dan kepatuhan spesifikasi teknis pekerjaan konstruksi fisik',
+        ruangLingkup: 'Perencanaan s.d Pelaksanaan Konstruksi Jalan T.A. 2024',
+        pelaksana: 'Irban 2',
+        jadwal: 'TW II',
+        bulan: 5,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 15, kt: 45, at: 180, totalHp: 242 },
+        jumlahLaporan: 3,
+        saranaPrasarana: ['Kendaraan Roda 4', 'Laptop', 'ATK', 'Printer', 'Alat Ukur'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Pengelolaan Pendidikan dan Bantuan Operasional Sekolah',
+        jenisPengawasan: 'Audit Tujuan Tertentu Dana BOS & Sarpras Pendidikan',
+        tujuanSasaran: '1. Verifikasi ketepatan sasaran dana BOS\n2. Pengawasan pengadaan mebelair dan rehabilitasi gedung sekolah',
+        ruangLingkup: 'Belanja Hibah BOS dan Belanja Modal Sekolah',
+        pelaksana: 'Irban 3',
+        jadwal: 'TW II',
+        bulan: 6,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 10, kt: 20, at: 100, totalHp: 132 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'Kertas', 'Kendaraan Roda 4'],
+        tingkatRisiko: 'Tinggi',
+      },
+      {
+        areaPengawasan: 'Program Sediaan Farmasi, Alat Kesehatan dan Pelayanan Medik',
+        jenisPengawasan: 'Probity Audit Pengadaan Alkes & Obat-obatan (MCP-KPK)',
+        tujuanSasaran: 'Memastikan proses pemilihan penyedia alkes dan obat berlangsung transparan, adil, dan bebas benturan kepentingan',
+        ruangLingkup: 'Tahap Perencanaan s.d Kontrak PBJ Alkes',
+        pelaksana: 'Irban Investigasi',
+        jadwal: 'TW III',
+        bulan: 8,
+        hariPemeriksaan: { pj: 1, wkpj: 1, dalnis: 20, kt: 20, at: 80, totalHp: 122 },
+        jumlahLaporan: 1,
+        saranaPrasarana: ['Laptop', 'Printer', 'ATK', 'Kendaraan Roda 4'],
+        tingkatRisiko: 'Tinggi',
+      },
+    ];
 
+    const agendaItems = rankings.slice(0, 5).map((r, idx) => {
+      const template = referenceTemplates[idx % referenceTemplates.length];
       return {
         opdId: r.opdId,
         opdName: r.opd.namaOpd,
-        jenisPengawasan: jenis,
-        perkiraanBulan: bulan,
-        estimasiAnggaran: anggaran,
-        hariPemeriksaan: {
-          pj: 5,
-          wkpj: 5,
-          dalnis: 10,
-          kt: 15,
-          at: 30,
-        },
-        saranaPrasarana: ['Laptop', 'Printer', 'ATK', 'Kendaraan roda 4'],
-        alasanPrioritas: `OPD diprioritaskan karena memiliki Nilai Total Risiko tinggi sebesar ${r.ntr} pada tahun anggaran ${tahun}.`,
+        areaPengawasan: template.areaPengawasan,
+        jenisPengawasan: template.jenisPengawasan,
+        tujuanSasaran: template.tujuanSasaran,
+        ruangLingkup: template.ruangLingkup,
+        pelaksana: template.pelaksana,
+        jadwal: template.jadwal,
+        perkiraanBulan: template.bulan,
+        estimasiAnggaran: 0,
+        hariPemeriksaan: template.hariPemeriksaan,
+        jumlahLaporan: template.jumlahLaporan,
+        saranaPrasarana: template.saranaPrasarana,
+        tingkatRisiko: template.tingkatRisiko,
+        keterangan: 'Prioritas Audit Pengawasan Berbasis Risiko',
+        alasanPrioritas: `Diprioritaskan berdasarkan skor risiko NTR ${r.ntr} (NRI: ${r.nri}, NFR: ${r.nfr}) untuk tahun ${tahun}.`,
       };
     });
 
@@ -4052,6 +4228,41 @@ export class VendorLlmAdapter {
       return outputText;
     } catch (error) {
       this.logger.error(`Gagal menghubungi OpenAI: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async callLlmVision(
+    prompt: string,
+    base64Image: string,
+    options?: { model?: string; temperature?: number },
+  ): Promise<string> {
+    const model = options?.model || 'gpt-4o-mini';
+    const temperature = options?.temperature ?? 0;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64Image}`,
+                },
+              },
+            ],
+          },
+        ],
+        temperature,
+      });
+
+      return response.choices[0]?.message?.content || '';
+    } catch (error: any) {
+      this.logger.error(`Gagal menghubungi OpenAI Vision: ${error.message}`);
       throw error;
     }
   }
@@ -4616,6 +4827,7 @@ export class DocumentIngestionController {
     @UploadedFile(FileSignatureValidationPipe) file: any,
     @Body('type') type: DocumentType,
     @Body('title') title: string,
+    @Body('opdId') opdId?: string,
   ) {
     if (!type || !title) {
       throw new BadRequestException('Parameter type (DocumentType) dan title wajib diisi.');
@@ -4627,7 +4839,7 @@ export class DocumentIngestionController {
       );
     }
 
-    const jobResult = await this.ingestionService.queueDocumentForIngestion(file, type, title);
+    const jobResult = await this.ingestionService.queueDocumentForIngestion(file, type, title, opdId);
 
     return {
       success: true,
@@ -4638,8 +4850,8 @@ export class DocumentIngestionController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll() {
-    const documents = await this.ingestionService.findAllDocuments();
+  async findAll(@Query('opdId') opdId?: string) {
+    const documents = await this.ingestionService.findAllDocuments(opdId);
     return {
       success: true,
       message: 'Berhasil mengambil daftar dokumen Knowledge Base.',
@@ -4672,6 +4884,16 @@ export class DocumentIngestionController {
           filePath: r.document.filePath,
         },
       })),
+    };
+  }
+
+  @Get('job/:id')
+  @HttpCode(HttpStatus.OK)
+  async getJobStatus(@Param('id') id: string) {
+    const jobStatus = await this.ingestionService.getJobStatus(id);
+    return {
+      success: true,
+      data: jobStatus,
     };
   }
 
@@ -4763,6 +4985,7 @@ export interface IngestionJobData {
     originalName: string;
     fileSize: number;
     hash: string;
+    opdId?: string | null;
 }
 
 @Processor('document_ingestion')
@@ -4789,23 +5012,33 @@ export class DocumentIngestionProcessor extends WorkerHost {
             originalName,
             fileSize,
             hash,
+            opdId,
         } = job.data;
 
         this.logger.log(`[Job ${job.id}] Memulai pemrosesan AI Ingestion untuk dokumen: ${originalName}`);
 
         try {
-            const buffer = await fsPromises.readFile(filePath);
+            let rawText = '';
+            try {
+                const buffer = await fsPromises.readFile(filePath);
 
-            const ext = originalName.split('.').pop()?.toLowerCase() || '';
-            const parser = this.parserFactory.getParser(mimeType, ext);
+                const ext = originalName.split('.').pop()?.toLowerCase() || '';
+                const parser = this.parserFactory.getParser(mimeType, ext);
 
-            this.logger.log(`[Job ${job.id}] Mengekstrak teks menggunakan parser (.${ext})...`);
-            const rawText = await parser.parse(buffer);
+                this.logger.log(`[Job ${job.id}] Mengekstrak teks menggunakan parser (.${ext})...`);
+                rawText = await parser.parse(buffer);
+            } catch (parseError: any) {
+                this.logger.error(`[Job ${job.id}] GAGAL mengekstrak teks (Permanent Error): ${parseError.message}`);
+                await job.discard();
+                throw parseError;
+            }
 
             const cleanedText = this.sanitizerPipeline.sanitize(rawText);
 
             const chunks = this.chunkerService.chunkText(cleanedText);
             if (chunks.length === 0) {
+                this.logger.error(`[Job ${job.id}] GAGAL memproses (Permanent Error): Dokumen tidak mengandung teks atau non-OCR.`);
+                await job.discard();
                 throw new Error('Dokumen tidak mengandung teks yang dapat diekstrak atau dokumen berupa hasil scan (non-OCR).');
             }
             this.logger.log(`[Job ${job.id}] Berhasil memecah teks menjadi ${chunks.length} chunks.`);
@@ -4826,6 +5059,7 @@ export class DocumentIngestionProcessor extends WorkerHost {
                     type,
                     filePath: dbRelativePath,
                     status: 'AKTIF',
+                    opdId: opdId || undefined,
                 },
                 {
                     fileSize,
@@ -4922,20 +5156,119 @@ export class ParserFactory {
 
 --- FILE: src\document-ingestion\parsers\pdf-parser.adapter.ts ---
 
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { DocumentParser } from './document-parser.interface';
 import * as pdfParse from 'pdf-parse';
+import { VendorLlmAdapter } from '../../common/ai/vendor-llm.adapter';
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execPromise = promisify(exec);
 
 @Injectable()
 export class PdfParserAdapter implements DocumentParser {
+  private readonly logger = new Logger(PdfParserAdapter.name);
+
+  constructor(private readonly llmAdapter: VendorLlmAdapter) {}
+
   async parse(buffer: Buffer): Promise<string> {
     try {
+      this.logger.log('Mulai parsing PDF menggunakan pdf-parse...');
       const data = await pdfParse(buffer);
-      return data.text || '';
-    } catch (error) {
-      throw new InternalServerErrorException(
-        `Gagal mengurai berkas PDF: ${error.message}`,
-      );
+      const extractedText = data.text || '';
+
+      if (extractedText.trim().length < 150) {
+        this.logger.warn(
+          `Hasil ekstraksi pdf-parse sangat pendek (${extractedText.trim().length} karakter). Menjalankan Multimodal AI-OCR...`
+        );
+        return await this.parseScannedPdf(buffer);
+      }
+
+      this.logger.log(`Berhasil mengekstrak ${extractedText.length} karakter teks dari PDF.`);
+      return extractedText;
+    } catch (error: any) {
+      this.logger.error(`Gagal mengurai berkas PDF: ${error.message}. Mencoba fallback Multimodal AI-OCR...`);
+      try {
+        return await this.parseScannedPdf(buffer);
+      } catch (ocrError: any) {
+        throw new InternalServerErrorException(
+          `Gagal mengurai berkas PDF menggunakan parser standard maupun AI-OCR: ${ocrError.message}`,
+        );
+      }
+    }
+  }
+
+  private async parseScannedPdf(buffer: Buffer): Promise<string> {
+    const tempDir = os.tmpdir();
+    const timestamp = Date.now();
+    const tempPdfPath = path.join(tempDir, `temp_ocr_${timestamp}.pdf`);
+    const tempOutputDir = path.join(tempDir, `temp_ocr_out_${timestamp}`);
+
+    try {
+
+      await fs.writeFile(tempPdfPath, buffer);
+
+      let pythonCmd = 'python';
+      const winPythonPath = 'C:/Users/PC/AppData/Local/Python/pythoncore-3.14-64/python.exe';
+      try {
+        const stat = await fs.stat(winPythonPath);
+        if (stat.isFile()) {
+          pythonCmd = `"${winPythonPath}"`;
+        }
+      } catch (e) {
+
+      }
+
+      this.logger.log(`Menjalankan script Python pdf_to_images.py menggunakan ${pythonCmd} untuk ${tempPdfPath}...`);
+      const scriptPath = path.resolve('scratch/pdf_to_images.py');
+      const cmd = `${pythonCmd} "${scriptPath}" "${tempPdfPath}" "${tempOutputDir}"`;
+
+      const { stdout } = await execPromise(cmd);
+      const result = JSON.parse(stdout.trim());
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      const imageFiles: string[] = result.files;
+      this.logger.log(`Python berhasil menghasilkan ${imageFiles.length} citra halaman.`);
+
+      let combinedMarkdown = '';
+
+      for (let i = 0; i < imageFiles.length; i++) {
+        const imagePath = imageFiles[i];
+        this.logger.log(`Memproses halaman ${i + 1}/${imageFiles.length} via OpenAI Vision...`);
+
+        const imageBuffer = await fs.readFile(imagePath);
+        const base64Image = imageBuffer.toString('base64');
+
+        const prompt = `Ekstrak seluruh teks dan tabel dari gambar halaman dokumen ini menjadi format Markdown yang rapi dan terstruktur.
+SANGAT PENTING:
+1. Jika terdapat tabel (baris dan kolom), susunlah kembali menjadi tabel Markdown yang rapi dengan format pipa (|) dan pembatas kolom (contoh: | header 1 | header 2 | \n | --- | --- |).
+2. JANGAN mengubah nilai angka, tanggal, atau nama.
+3. JANGAN mendeskripsikan gambar, langsung ekstrak teks dan tabelnya saja secara verbatim (apa adanya).
+4. Kembalikan HANYA teks Markdown hasil ekstraksi, tanpa pembungkus blok kode markdown (\`\`\`markdown ... \`\`\`).`;
+
+        const pageText = await this.llmAdapter.callLlmVision(prompt, base64Image);
+        combinedMarkdown += `\n--- Halaman ${i + 1} ---\n${pageText.trim()}\n`;
+      }
+
+      this.logger.log('Selesai memproses seluruh halaman PDF dengan Multimodal AI-OCR.');
+      return combinedMarkdown;
+    } catch (error: any) {
+      this.logger.error(`Proses Multimodal AI-OCR gagal: ${error.message}`);
+      throw error;
+    } finally {
+
+      try {
+        await fs.unlink(tempPdfPath).catch(() => {});
+        await fs.rm(tempOutputDir, { recursive: true, force: true }).catch(() => {});
+      } catch (cleanupError) {
+        this.logger.warn(`Gagal membersihkan file temporary: ${cleanupError.message}`);
+      }
     }
   }
 }
@@ -5047,18 +5380,20 @@ export class DocumentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async saveIngestedDocument(
-    document: { title: string; type: DocumentType; filePath: string; status?: DocumentStatus },
+    document: { title: string; type: DocumentType; filePath: string; status?: DocumentStatus; opdId?: string },
     metadata: { fileSize: number; mimeType: string; totalChunks: number; totalTokens?: number; hash: string },
     chunks: { chunkIndex: number; content: string; embedding: number[] }[],
   ) {
     return this.prisma.$transaction(async (tx) => {
 
+      const isUuid = document.opdId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(document.opdId) : false;
       const savedDoc = await tx.auditDocument.create({
         data: {
           title: document.title,
           type: document.type,
           filePath: document.filePath,
           status: document.status || DocumentStatus.DRAF,
+          opdId: isUuid ? document.opdId : null,
         },
       });
 
@@ -5126,10 +5461,39 @@ export class DocumentRepository {
         similarity: parseFloat(r.similarity) || 0.0,
         document: { id: r.documentId }
       }));
-    } catch (rawError) {
-      this.logger.warn(`pgvector tidak didukung atau belum dipasang di database. Menjalankan fallback keyword search.`);
+    } catch (rawError: any) {
+      this.logger.warn(`pgvector tidak didukung atau belum dipasang di database: ${rawError.message}. Menjalankan fallback in-memory cosine similarity search.`);
 
-      return this.searchKeyword('', limit);
+      try {
+        const allChunks = await this.prisma.docChunk.findMany({
+          where: {
+            document: {
+              status: DocumentStatus.AKTIF,
+            },
+          },
+          include: {
+            document: true,
+          },
+        });
+
+        const scoredChunks = allChunks.map((chunk) => {
+          const sim = this.cosineSimilarity(queryVector, chunk.embedding);
+          return {
+            id: chunk.id,
+            chunkIndex: chunk.chunkIndex,
+            content: chunk.content,
+            embedding: [],
+            similarity: sim,
+            document: chunk.document,
+          };
+        });
+
+        scoredChunks.sort((a, b) => b.similarity - a.similarity);
+        return scoredChunks.slice(0, limit);
+      } catch (fallbackError: any) {
+        this.logger.error(`Fallback search gagal: ${fallbackError.message}`);
+        return this.searchKeyword('', limit);
+      }
     }
   }
 
@@ -5200,7 +5564,7 @@ export class DocumentIngestionService {
     }
   }
 
-  async queueDocumentForIngestion(file: any, type: DocumentType, title: string) {
+  async queueDocumentForIngestion(file: any, type: DocumentType, title: string, opdId?: string) {
     const buffer = file.buffer;
     const fileSize = buffer.length;
     const mimeType = file.mimetype;
@@ -5237,6 +5601,7 @@ export class DocumentIngestionService {
         originalName,
         fileSize,
         hash,
+        opdId: opdId || null,
       }, {
         attempts: 3,
         backoff: { type: 'exponential', delay: 5000 },
@@ -5303,10 +5668,30 @@ export class DocumentIngestionService {
     return savedDoc;
   }
 
-  async findAllDocuments() {
+  async findAllDocuments(opdId?: string) {
+    const where: any = {};
+    if (opdId) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(opdId);
+      if (isUuid) {
+        where.opdId = opdId;
+      } else {
+
+        return this.prisma.auditDocument.findMany({
+          include: {
+            metadata: true,
+            opd: { select: { id: true, namaOpd: true } },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+      }
+    }
     return this.prisma.auditDocument.findMany({
+      where,
       include: {
         metadata: true,
+        opd: { select: { id: true, namaOpd: true } },
       },
       orderBy: {
         createdAt: 'desc',
@@ -5349,6 +5734,21 @@ export class DocumentIngestionService {
       return this.documentRepository.searchKeyword(query, limit);
     }
   }
+
+  async getJobStatus(jobId: string) {
+    const job = await this.ingestionQueue.getJob(jobId);
+    if (!job) {
+      throw new NotFoundException('Pekerjaan tidak ditemukan.');
+    }
+    const state = await job.getState();
+    const reason = job.failedReason;
+    return {
+      id: job.id,
+      state,
+      progress: job.progress,
+      failedReason: reason || null,
+    };
+  }
 }
 
 --- FILE: src\document-ingestion\services\semantic-chunker.service.ts ---
@@ -5361,57 +5761,120 @@ export class SemanticChunkerService {
   chunkText(text: string, targetSize = 2000, overlapPercent = 12): string[] {
     if (!text) return [];
 
-    const overlapSize = Math.floor(targetSize * (overlapPercent / 100));
+    const lines = text.split(/\n/);
+    const items: Array<{ type: 'text' | 'table'; content: string; header?: string }> = [];
 
-    const paragraphs = text.split(/\n+/);
-    const sentences: string[] = [];
+    let isInsideTable = false;
+    let currentTableRows: string[] = [];
 
-    for (const paragraph of paragraphs) {
-      if (paragraph.trim() === '') continue;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      const isTableRow = trimmedLine.startsWith('|') && trimmedLine.endsWith('|');
 
-      const paragraphSentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [paragraph];
-      for (const sentence of paragraphSentences) {
-        const trimmed = sentence.trim();
-        if (trimmed !== '') {
-          sentences.push(trimmed);
+      if (isTableRow) {
+        if (!isInsideTable) {
+          isInsideTable = true;
+          currentTableRows = [line];
+        } else {
+          currentTableRows.push(line);
+        }
+      } else {
+        if (isInsideTable) {
+
+          const header = currentTableRows.slice(0, 2).join('\n');
+          items.push({
+            type: 'table',
+            content: currentTableRows.join('\n'),
+            header,
+          });
+          currentTableRows = [];
+          isInsideTable = false;
+        }
+
+        if (trimmedLine !== '') {
+          items.push({ type: 'text', content: line });
         }
       }
+    }
+
+    if (isInsideTable && currentTableRows.length > 0) {
+      const header = currentTableRows.slice(0, 2).join('\n');
+      items.push({
+        type: 'table',
+        content: currentTableRows.join('\n'),
+        header,
+      });
     }
 
     const chunks: string[] = [];
-    let currentChunk: string[] = [];
-    let currentLength = 0;
+    let currentChunkText = '';
 
-    for (let i = 0; i < sentences.length; i++) {
-      const sentence = sentences[i];
-      currentChunk.push(sentence);
-      currentLength += sentence.length + 1;
+    for (const item of items) {
+      if (item.type === 'text') {
+        const paragraph = item.content;
 
-      if (currentLength >= targetSize) {
-        chunks.push(currentChunk.join(' '));
-
-        let overlapLength = 0;
-        const overlapSentences: string[] = [];
-
-        for (let j = currentChunk.length - 1; j >= 0; j--) {
-          const s = currentChunk[j];
-          if (overlapLength + s.length > overlapSize) {
-            break;
+        if (currentChunkText.length + paragraph.length + 1 > targetSize) {
+          if (currentChunkText.trim().length > 0) {
+            chunks.push(currentChunkText.trim());
           }
-          overlapSentences.unshift(s);
-          overlapLength += s.length + 1;
-        }
 
-        currentChunk = [...overlapSentences];
-        currentLength = overlapLength;
+          if (paragraph.length > targetSize) {
+            const sentences = paragraph.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [paragraph];
+            let tempText = '';
+            for (const sentence of sentences) {
+              if (tempText.length + sentence.length + 1 > targetSize) {
+                chunks.push(tempText.trim());
+                tempText = sentence;
+              } else {
+                tempText += (tempText ? ' ' : '') + sentence.trim();
+              }
+            }
+            currentChunkText = tempText;
+          } else {
+            currentChunkText = paragraph;
+          }
+        } else {
+          currentChunkText += (currentChunkText ? '\n' : '') + paragraph;
+        }
+      } else {
+
+        const tableContent = item.content;
+        const header = item.header || '';
+
+        if (currentChunkText.length + tableContent.length + 1 > targetSize) {
+          if (currentChunkText.trim().length > 0) {
+            chunks.push(currentChunkText.trim());
+            currentChunkText = '';
+          }
+
+          if (tableContent.length > targetSize) {
+            const rows = tableContent.split('\n');
+            const tableHeaderLines = rows.slice(0, 2);
+            let tempTableText = tableHeaderLines.join('\n');
+
+            for (let j = 2; j < rows.length; j++) {
+              const row = rows[j];
+              if (tempTableText.length + row.length + 1 > targetSize) {
+                chunks.push(tempTableText.trim());
+
+                tempTableText = tableHeaderLines.join('\n') + '\n' + row;
+              } else {
+                tempTableText += '\n' + row;
+              }
+            }
+            currentChunkText = tempTableText;
+          } else {
+            currentChunkText = tableContent;
+          }
+        } else {
+          currentChunkText += (currentChunkText ? '\n' : '') + tableContent;
+        }
       }
     }
 
-    if (currentChunk.length > 0 && currentLength > 0) {
-      const remainingText = currentChunk.join(' ').trim();
-      if (remainingText.length > 10) {
-        chunks.push(remainingText);
-      }
+    if (currentChunkText.trim().length > 0) {
+      chunks.push(currentChunkText.trim());
     }
 
     return chunks;
@@ -5612,6 +6075,8 @@ import { KkaService } from './kka.service';
 import { KkaController } from './kka.controller';
 import { AiModule } from '../common/ai/ai.module';
 import { DocumentIngestionModule } from '../document-ingestion/document-ingestion.module';
+import { PbjParserService } from './services/pbj-parser.service';
+import { SemanticAuditService } from './services/semantic-audit.service';
 
 @Module({
   imports: [
@@ -5619,8 +6084,16 @@ import { DocumentIngestionModule } from '../document-ingestion/document-ingestio
     DocumentIngestionModule,
   ],
   controllers: [KkaController],
-  providers: [KkaService],
-  exports: [KkaService],
+  providers: [
+    KkaService,
+    PbjParserService,
+    SemanticAuditService,
+  ],
+  exports: [
+    KkaService,
+    PbjParserService,
+    SemanticAuditService,
+  ],
 })
 export class KkaModule { }
 
@@ -5641,7 +6114,8 @@ import { StatusKka, SumberPembuatan, DocumentType } from '@prisma/client';
 import { VendorLlmAdapter } from '../common/ai/vendor-llm.adapter';
 import { DocumentRepository } from '../document-ingestion/repositories/document.repository';
 import { ExternalEmbeddingAdapter } from '../document-ingestion/providers/external-embedding.adapter';
-import * as ExcelJS from 'exceljs';
+import { PbjParserService } from './services/pbj-parser.service';
+import { SemanticAuditService } from './services/semantic-audit.service';
 
 @Injectable()
 export class KkaService {
@@ -5652,6 +6126,8 @@ export class KkaService {
     private readonly llmAdapter: VendorLlmAdapter,
     private readonly docRepository: DocumentRepository,
     private readonly embeddingAdapter: ExternalEmbeddingAdapter,
+    private readonly parserService: PbjParserService,
+    private readonly semanticAuditService: SemanticAuditService,
   ) { }
 
   async createKka(dto: CreateKkaDto) {
@@ -5695,30 +6171,12 @@ export class KkaService {
     }
 
     this.logger.log(`Memulai ekstraksi berkas Excel SPJ untuk KKA ID: ${id}`);
-    const workbook = new ExcelJS.Workbook();
-    try {
-      await workbook.xlsx.load(file.buffer);
-    } catch (err) {
-      throw new BadRequestException('Berkas Excel rusak atau tidak dapat dibaca oleh parser.');
-    }
 
-    const worksheet = workbook.getWorksheet(dto.spjSheetName) || workbook.worksheets[0];
-    if (!worksheet) {
-      throw new BadRequestException(`Sheet bernama "${dto.spjSheetName}" tidak ditemukan di berkas Excel.`);
-    }
-
-    const spjRows: { itemName: string; volume: number; price: number }[] = [];
-    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      if (rowNumber < dto.rowStart) return;
-
-      const itemName = row.getCell(1).text?.trim();
-      const volume = parseInt(row.getCell(2).text, 10) || 0;
-      const price = parseFloat(row.getCell(3).text) || 0;
-
-      if (itemName) {
-        spjRows.push({ itemName, volume, price });
-      }
-    });
+    const spjRows = await this.parserService.parseAndNormalize(
+      file.buffer,
+      dto.spjSheetName,
+      dto.rowStart,
+    );
 
     this.logger.log(`Berhasil mengekstrak ${spjRows.length} baris data kuitansi realisasi.`);
 
@@ -5729,112 +6187,11 @@ export class KkaService {
     const auditResults = [];
 
     for (const spjItem of spjRows) {
-
-      let queryVector: number[];
-      try {
-        queryVector = await this.embeddingAdapter.generateEmbedding(`Rincian barang kuitansi: ${spjItem.itemName}`);
-      } catch (e) {
-        queryVector = new Array(1536).fill(0);
-      }
-
-      const rkaChunks = await this.prisma.docChunk.findMany({
-        where: {
-          document: {
-            stId: kka.stId,
-            type: DocumentType.RKA_PERENCANAAN,
-          },
-        },
-      });
-
-      let closestRkaContext = 'Tidak ditemukan dokumen RKA Rencana Anggaran resmi di database.';
-      if (rkaChunks.length > 0) {
-
-        const matched = rkaChunks
-          .map((chunk) => {
-            let dotProduct = 0;
-            let normA = 0;
-            let normB = 0;
-            for (let i = 0; i < queryVector.length; i++) {
-              dotProduct += queryVector[i] * chunk.embedding[i];
-              normA += queryVector[i] * queryVector[i];
-              normB += chunk.embedding[i] * chunk.embedding[i];
-            }
-            const similarity = normA === 0 || normB === 0 ? 0 : dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-            return { chunk, similarity };
-          })
-          .sort((a, b) => b.similarity - a.similarity)[0];
-
-        if (matched && matched.similarity > 0.3) {
-          closestRkaContext = `Rencana Anggaran yang Direferensikan:\n${matched.chunk.content}`;
-        }
-      }
-
-      const systemPrompt = `Anda adalah Asisten AI Auditor PBJ di Inspektorat Daerah.
-Tugas Anda adalah mendeteksi ketidaksesuaian atau anomali pengadaan barang (mismatch spesifikasi/merk/warna) berdasarkan data perbandingan yang disuplai.
-Anda WAJIB memberikan respon dalam format JSON murni mengikuti struktur objek berikut:
-{
-  "isMismatch": boolean,
-  "similarityScore": number, // Skor kemiripan nama barang (0.0 s.d 1.0)
-  "specRequired": "nama barang rencana",
-  "priceContract": number, // harga satuan rencana
-  "volumeContract": number, // volume rencana
-  "analisisCopilot": "analisis rinci mengapa barang ini menyimpang (kondisi vs kriteria)"
-}`;
-
-      const userPrompt = `
-=== BARANG REALISASI (SPJ) ===
-- Nama Barang: "${spjItem.itemName}"
-- Volume: ${spjItem.volume}
-- Harga Satuan: Rp ${spjItem.price.toLocaleString('id-ID')}
-
-=== KONTEKS PERENCANAAN (RKA) ===
-${closestRkaContext}
-
-Evaluasi secara objektif:
-- Apakah ada perbedaan warna, merk, ukuran atau spesifikasi lainnya?
-- Apakah harga realisasi melebihi harga rencana anggaran?
-- Berikan analisis tertulis formal audit.`;
-
-      let aiResult: any;
-      try {
-        const rawAi = await this.llmAdapter.callLlm(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1 });
-        aiResult = JSON.parse(rawAi);
-      } catch (err) {
-        this.logger.warn(`AI Gagal memproses baris "${spjItem.itemName}", menjalankan fallback deterministik.`);
-        aiResult = {
-          isMismatch: true,
-          similarityScore: 0.5,
-          specRequired: 'Tidak Teridentifikasi (Fallback)',
-          priceContract: 0.0,
-          volumeContract: 0.0,
-          analisisCopilot: `[FALLBACK SYSTEM] Terdeteksi ketidaksesuaian deskripsi secara manual pada baris SPJ "${spjItem.itemName}".`,
-        };
-      }
-
-      const priceContract = Number(aiResult.priceContract || 0);
-      const selisihHarga = spjItem.price > priceContract && priceContract > 0
-        ? (spjItem.price - priceContract) * spjItem.volume
-        : 0.0;
-
-      const status = aiResult.isMismatch || selisihHarga > 0 ? 'ANOMALI' : 'SESUAI';
-
-      const savedItem = await this.prisma.trItemAuditPBJ.create({
-        data: {
-          kkaId: id,
-          itemName: spjItem.itemName,
-          specRequired: aiResult.specRequired || null,
-          specActual: spjItem.itemName,
-          priceContract: priceContract,
-          priceActual: spjItem.price,
-          volumeContract: Number(aiResult.volumeContract || 0),
-          volumeActual: spjItem.volume,
-          selisihHarga: selisihHarga,
-          analisisCopilot: aiResult.analisisCopilot || null,
-          status,
-          sumberPembuatan: SumberPembuatan.AI_COPILOT,
-        },
-      });
-
+      const savedItem = await this.semanticAuditService.compareAndAuditItem(
+        kka.stId,
+        id,
+        spjItem,
+      );
       auditResults.push(savedItem);
     }
 
@@ -6308,7 +6665,7 @@ export class SemanticAuditService {
         stId: string,
         kkaId: string,
         spjItem: NormalizedPbjRow,
-        documentId: string,
+        documentId?: string,
     ): Promise<any> {
         this.logger.log(`[Semantic PBJ Audit] Menganalisis baris SPJ ke-${spjItem.rowNumber}: "${spjItem.itemName}"`);
 
@@ -6418,7 +6775,7 @@ Berikan output JSON sekarang:`;
             return await this.prisma.trItemAuditPBJ.create({
                 data: {
                     kkaId,
-                    documentId,
+                    documentId: documentId || null,
                     itemName: spjItem.itemName,
                     specRequired: aiResult.specRequired || null,
                     specActual: spjItem.itemName,

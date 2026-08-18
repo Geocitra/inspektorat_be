@@ -84,11 +84,16 @@ export class AuditPlanningService {
     });
   }
 
-  // [FITUR BARU] Edit Agenda (Jika Kasubag merubah hasil AI secara manual)
+  // [FITUR BARU] Edit Agenda per-baris (Jika Kasubag menyesuaikan rincian data PKPT)
   async updateAgenda(id: string, dto: UpdateAgendaDto) {
-    const agenda = await this.prisma.trAgendaAudit.findUnique({ where: { id }, include: { pkpt: true } });
+    const agenda = await this.prisma.trAgendaAudit.findUnique({ 
+      where: { id }, 
+      include: { pkpt: true, suratTugas: true } 
+    });
     if (!agenda) throw new NotFoundException('Agenda audit tidak ditemukan.');
-    if (agenda.pkpt.statusPkpt !== 'DRAF') throw new ConflictException('Hanya agenda draf yang dapat diedit.');
+    if (agenda.suratTugas && agenda.suratTugas.statusSt === 'AKTIF') {
+      throw new ConflictException('Agenda tidak dapat diedit karena Surat Tugas aktif sedang berjalan di lapangan.');
+    }
 
     const currentSubstansi = (agenda.substansiDokumen as object) || {};
     const mergedSubstansi = dto.substansiDokumen ? { ...currentSubstansi, ...dto.substansiDokumen } : currentSubstansi;
@@ -96,10 +101,13 @@ export class AuditPlanningService {
     return this.prisma.trAgendaAudit.update({
       where: { id },
       data: {
-        jenisPengawasan: dto.jenisPengawasan,
-        perkiraanBulan: dto.perkiraanBulan,
-        estimasiAnggaran: dto.estimasiAnggaran,
+        jenisPengawasan: dto.jenisPengawasan || agenda.jenisPengawasan,
+        perkiraanBulan: dto.perkiraanBulan || agenda.perkiraanBulan,
+        estimasiAnggaran: dto.estimasiAnggaran !== undefined ? dto.estimasiAnggaran : agenda.estimasiAnggaran,
         substansiDokumen: Object.keys(mergedSubstansi).length > 0 ? mergedSubstansi : undefined,
+      },
+      include: {
+        opd: true,
       },
     });
   }

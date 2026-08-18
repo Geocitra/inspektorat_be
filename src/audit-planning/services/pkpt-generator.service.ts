@@ -196,17 +196,21 @@ Berikan output JSON sekarang:`;
         });
 
         if (pkpt) {
-          if (pkpt.statusPkpt !== 'DRAF') {
-            throw new Error(`PKPT tahun anggaran ${tahunAnggaran} sudah DISETUJUI dan dikunci.`);
-          }
           await tx.trAgendaAudit.deleteMany({
             where: { pkptId: pkpt.id },
+          });
+          pkpt = await tx.trPkpt.update({
+            where: { id: pkpt.id },
+            data: {
+              statusPkpt: 'DISETUJUI',
+              sumberPembuatan,
+            },
           });
         } else {
           pkpt = await tx.trPkpt.create({
             data: {
               tahunAnggaran,
-              statusPkpt: 'DRAF',
+              statusPkpt: 'DISETUJUI',
               sumberPembuatan,
             },
           });

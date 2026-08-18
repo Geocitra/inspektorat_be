@@ -46,6 +46,8 @@ export class PegawaiService {
         nama: dto.nama,
         golongan: dto.golongan,
         jabatan: dto.jabatan,
+        unitKerja: dto.unitKerja || 'IRBAN_1',
+        isAuditorLapangan: dto.isAuditorLapangan !== undefined ? dto.isAuditorLapangan : true,
         opdId: dto.opdId,
         sumberData: 'MANUAL',
       },
@@ -98,11 +100,27 @@ export class PegawaiService {
   }
 
   /**
-   * Mengambil seluruh data pegawai, include nama OPD-nya.
+   * Mengambil seluruh data pegawai, include nama OPD dan penugasan aktif.
    */
   async findAll() {
     return this.prisma.mstPegawai.findMany({
-      include: { opd: true },
+      include: { 
+        opd: true,
+        stAuditors: {
+          where: {
+            suratTugas: { statusSt: 'AKTIF' }
+          },
+          include: {
+            suratTugas: {
+              include: {
+                agendaAudit: {
+                  include: { opd: true }
+                }
+              }
+            }
+          }
+        }
+      },
       orderBy: { nama: 'asc' },
     });
   }
